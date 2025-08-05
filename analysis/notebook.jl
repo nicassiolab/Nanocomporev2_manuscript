@@ -15,6 +15,9 @@ begin
 	using Printf
 end
 
+# ╔═╡ 71667c1d-cf1a-43a6-b3a6-ffafd87fc069
+using AlgebraOfGraphics
+
 # ╔═╡ 11b96b0e-33e1-11f0-23a0-f998c7e38e3f
 include("lib.jl")
 
@@ -22,19 +25,28 @@ include("lib.jl")
 import MultipleTesting
 
 # ╔═╡ b7f89781-6332-4942-8d5b-7d95e0550b63
-LOR_THRESHOLD = 0.8
+LOR_THRESHOLD = 0.5
 
 # ╔═╡ 6608e7a5-fde0-4f0c-9a33-a89c0fe0b858
 begin
-	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/high_confidence_GLORI_sites.bed"))
-	glori[!, "pos"] = glori.start .+ 2
+	# glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/high_confidence_GLORI_sites.bed"))
+	# glori[!, "pos"] = glori.start .+ 2
+	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/GLORI_intersection_176k_with_ratio.bed"))
+	glori[:, :pos] = glori.start
+	glori = rename!(glori, :chr => :chrom)
+	
 	glori[!, "bin"] = map(p -> div(p, BIN_SIZE), glori.pos)
 	glori[!, "modified"] .= 1
 	glori
 end
 
 # ╔═╡ 05ce3923-41da-4ab4-9ae5-860e0531f8f8
-binned_glori = unique(glori[!, ["chrom", "strand", "bin", "modified"]])
+begin
+	binned_glori = unique(glori[!, ["chrom", "strand", "bin", "modified"]])
+	binned_glori = combine(groupby(glori, [:chrom, :strand, :bin, :modified]),
+						   :ratio => maximum => :ratio)
+	binned_glori = rename!(binned_glori, :chrom => :chr)
+end
 
 # ╔═╡ 672662f5-68a9-4c48-a3b8-45a9fb5683d0
 begin
@@ -169,43 +181,186 @@ common_binned_1000 = innerjoin(binned_rna002_1000, binned_rna004_1000,
 							   on = [:chr, :strand, :bin],
 							   makeunique = true)
 
-# ╔═╡ 35650746-09b3-4529-ab73-28769d178437
+# ╔═╡ cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
+# rna002_tx = read_results(
+# 		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0/out_nanocompore_results.tsv",
+# 		"GMM_chi2_qvalue",
+# 		shift=2,
+# 		genomic_collapse=false;
+# 	    LOR_threshold = LOR_THRESHOLD)
+
 begin
-	local v1_results_part1 = read_results(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
-		"GMM_pvalue",
-		shift = 2,
-		genomic_collapse = true;
-		LOR_threshold = LOR_THRESHOLD)
-	local v1_results_part2 = read_results(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/outnanocompore_results_gx.tsv",
-		"GMM_pvalue",
-		shift = 2,
-		genomic_collapse = true;
-		LOR_threshold = LOR_THRESHOLD)
-	
-	# v1_results = annotate_results(vcat(v1_results_part1, v1_results_part2),
-	# 							  ref002)
-	v1_results = vcat(v1_results_part1, v1_results_part2)
-
-	# Correct for multiple testing
-	local present = v1_results.GMM_pvalue .!== missing
-	local qvals = MultipleTesting.adjust(
-		disallowmissing(v1_results[present, :].GMM_pvalue),
-		MultipleTesting.BenjaminiHochberg())
-	v1_results[!, :GMM_qvalue] = copy(v1_results.GMM_pvalue)
-	v1_results[present, :GMM_qvalue] .= qvals
-
-	lor_corrected_significance = ifelse.(abs.(v1_results[!, :GMM_LOR]) .>= LOR_THRESHOLD, v1_results[!, :GMM_qvalue], 1.0)
-	v1_results[!, :predicted] = -log10.(lor_corrected_significance)
-	
-	v1_results
+	rna002_tx = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0/out_nanocompore_results.tsv", delim = '\t'))
+	# rna002_tx = rna002_tx[rna002_tx.GMM_chi2_pvalue .!== missing, :]
+	rna002_tx[:, :GMM_chi2_pvalue] = ifelse.(rna002_tx.GMM_chi2_pvalue .=== missing,
+											 1,
+											 rna002_tx.GMM_chi2_pvalue)
+	rna002_tx[:, :GMM_LOR] = ifelse.(rna002_tx.GMM_LOR .=== missing,
+									 0,
+									 rna002_tx.GMM_LOR)
+	rna002_tx
 end
 
+# ╔═╡ a50423b1-d847-4429-9bb9-9d8a7523a459
+#=╠═╡
+v1_v2_common = innerjoin(v1_results, rna002_tx,
+		  				 on = [:ref_id, :pos],
+		  				 renamecols = "_v1" => "_v2")
+  ╠═╡ =#
+
+# ╔═╡ 884239d8-5613-44bc-a14c-348b3e31d3c3
+#=╠═╡
+begin
+	local common = copy(v1_v2_common[v1_v2_common.GMM_pvalue_v1 .!== missing .&& v1_v2_common.GMM_chi2_pvalue_v2 .!== missing, :])
+	local pvals1 = -log10.(clamp.(common.GMM_pvalue_v1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(common.GMM_chi2_pvalue_v2, 1e-300, 1))
+	pvals1 = ifelse.(abs.(common.GMM_LOR_v1) .< 0.5, 0, pvals1)
+	pvals2 = ifelse.(abs.(common.GMM_LOR_v2) .< 0.5, 0, pvals2)
+
+	println(cor(pvals1, pvals2))
+	
+	# common = common[.! (pvals1 .== 0 .&& pvals2 .== 0), :]
+	# local selected = pvals1 .!= 0 .|| pvals2 .!= 0
+	
+	scatter(pvals1,
+			pvals2,
+			markersize = 5,
+			color = :black,
+		    axis = (;
+					aspect = 1,
+				    xlabel = "v1: -log₁₀(𝑃-value)",
+				    ylabel = "v2: -log₁₀(𝑃-value)"))
+	# data(DataFrame(v1 = pvals1, v2 = pvals2)) * mapping(:v1 => "v1: -log₁₀(𝑃-value)", :v2 => "v2: -log₁₀(𝑃-value)") * visual(Scatter, markersize = 5) |> draw
+end
+  ╠═╡ =#
+
+# ╔═╡ 866b5d33-c2a7-4400-845e-50575053be71
+#=╠═╡
+begin
+	local common = copy(v1_v2_common)
+	common[:, :bin] = map(pos -> div(pos, BIN_SIZE), common.genomicPos_v2)
+	common[:, :predicted_v1] = -log10.(ifelse.(abs.(common.GMM_LOR_v1) .< 0.5,
+									   		   1,
+									   		   common.GMM_pvalue_v1))
+	common[:, :predicted_v2] = -log10.(ifelse.(abs.(common.GMM_LOR_v2) .< 0.5,
+									   		   1,
+									   		   common.GMM_chi2_pvalue_v2))
+	col_selector = (pred, col) -> col[argmax(pred)]
+	binned_v1_v2_common = combine(groupby(common, [:chr_v2, :strand_v2, :bin]),
+		    [:predicted_v1, :GMM_LOR_v1] => col_selector => :GMM_LOR_v1,
+		    [:predicted_v1, :GMM_pvalue_v1] => col_selector => :GMM_pvalue_v1,
+		    [:predicted_v2, :GMM_LOR_v2] => col_selector => :GMM_LOR_v2,
+		    [:predicted_v2, :GMM_chi2_pvalue_v2] => col_selector => :GMM_pvalue_v2)
+	binned_v1_v2_common = rename!(binned_v1_v2_common, :chr_v2 => :chr, :strand_v2 
+	=> :strand)
+
+	binned_v1_v2_common[:, :GMM_pvalue_v1] = clamp.(binned_v1_v2_common.GMM_pvalue_v1, 1e-300, 1)
+	binned_v1_v2_common[:, :GMM_pvalue_v2] = clamp.(binned_v1_v2_common.GMM_pvalue_v2, 1e-300, 1)
+
+	binned_v1_v2_common = leftjoin(binned_v1_v2_common, binned_glori,
+								   on = [:chr, :strand, :bin])
+	binned_v1_v2_common[:, :modified] = coalesce.(binned_v1_v2_common.modified, 0)
+	binned_v1_v2_common[:, :ratio] = coalesce.(binned_v1_v2_common.ratio, 0)
+	binned_v1_v2_common = dropmissing(binned_v1_v2_common, disallowmissing = true)
+	binned_v1_v2_common[:, :GMM_qvalue_v1] = MultipleTesting.adjust(
+		binned_v1_v2_common.GMM_pvalue_v1,
+		MultipleTesting.BenjaminiHochberg())
+	binned_v1_v2_common[:, :GMM_qvalue_v2] = MultipleTesting.adjust(
+		binned_v1_v2_common.GMM_pvalue_v2,
+		MultipleTesting.BenjaminiHochberg())
+	binned_v1_v2_common[:, :predicted_v1] = -log10.(binned_v1_v2_common.GMM_qvalue_v1)
+	binned_v1_v2_common[:, :predicted_v2] = -log10.(binned_v1_v2_common.GMM_qvalue_v2)
+	binned_v1_v2_common
+end
+  ╠═╡ =#
+
+# ╔═╡ 9193fd14-d45c-4534-a029-75ab8171ea40
+#=╠═╡
+begin
+	local rocs1 = roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v1, nrow(binned_v1_v2_common))
+	local precisions1 = vcat([0], map(precision, rocs1), [1])
+	local recalls1 = vcat([1], map(recall, rocs1), [0])
+	local rocs2 = roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v2, nrow(binned_v1_v2_common))
+	local precisions2 = vcat([0], map(precision, rocs2), [1])
+	local recalls2 = vcat([1], map(recall, rocs2), [0])
+
+	local df1 = DataFrame(precision = precisions1, recall = recalls1)
+	df1[:, :version] .= "v1"
+	local df2 = DataFrame(precision = precisions2, recall = recalls2)
+	df2[:, :version] .= "v2"
+
+	local df = vcat(df1, df2)
+
+	local p001_v1 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+	local r001_v1 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+
+	local p001_v2 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+	local r001_v2 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+
+	
+	
+	(
+		data(df) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Lines)
+		+
+		data(DataFrame(precision = [p001_v1, p001_v2], recall = [r001_v1, r001_v2], version = ["v1", "v2"])) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Scatter)
+	) |> draw(scales(Color = (; palette = [:black, COL_RNA002])); axis = (; aspect = 1))
+end
+  ╠═╡ =#
+
+# ╔═╡ 7a74c048-770c-4782-9c19-ab800f66b7e1
+#=╠═╡
+begin
+	local f = Figure()
+	local ax = Axis(f[1, 1],
+			  	    aspect = 1)
+
+
+	local a, p, r = auprc(binned_v1_v2_common.predicted_v1,
+	      		          Int.(binned_v1_v2_common.modified),
+	            	      Set([1]))
+	lines!(ax, r, p,
+	       label = "v1 AUC=$(round(a; digits = 2))",
+	       color = :black)
+	local p001 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+	local r001 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+	# scatter!(ax, [r001], [p001], color = :black)
+
+	local a, p, r = auprc(binned_v1_v2_common.predicted_v2,
+	      		          Int.(binned_v1_v2_common.modified),
+	            	      Set([1]))
+	lines!(ax, r, p,
+	       label = "v2 AUC=$(round(a; digits = 2))",
+	       color = COL_RNA002)
+	local p001 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+	local r001 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+	# scatter!(ax, [r001], [p001], color = COL_RNA002)
+	
+	axislegend(ax, "Version", position = :rt, labelsize = 12)
+	
+	f
+end
+  ╠═╡ =#
+
 # ╔═╡ 96a61659-2925-44ce-ae5a-a2e0c6f7b0f4
+#=╠═╡
 binned_v1_results = annotate_binned_results(
-	bin(v1_results, BIN_SIZE),
+	bin(innerjoin(v1_results, v1_v2_common[:, [:ref_id, :pos]],
+				  on = [:ref_id, :pos]), BIN_SIZE),
 	binned_glori)
+  ╠═╡ =#
+
+# ╔═╡ 9054c2f0-7050-4bb9-bd10-da57ec7fa69c
+
 
 # ╔═╡ 9b8efe40-93b3-4dc9-8a01-ac06eae5024e
 v1_refs = vcat(read_results(
@@ -238,13 +393,8 @@ v1_positions = vcat(
 			genomic_collapse = false;
 		    LOR_threshold = LOR_THRESHOLD)[:, [:ref_id, :pos]]))) |> Set
 
-# ╔═╡ cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
-rna002_tx = read_results(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0/out_nanocompore_results.tsv",
-		"GMM_chi2_qvalue",
-		shift=2,
-		genomic_collapse=false;
-	    LOR_threshold = LOR_THRESHOLD)
+# ╔═╡ 095e0c0f-2af2-4dc1-b852-bb554d1d8af1
+
 
 # ╔═╡ dc4ee9d0-7c6a-49fd-aa99-1fe3b5cb3f87
 begin
@@ -264,16 +414,19 @@ binned_v2_matched = annotate_binned_results(
 	binned_glori)
 
 # ╔═╡ 0e079cb8-3014-4149-ab6d-38f4ed3c256d
+#=╠═╡
 v1_v2_matched = innerjoin(binned_v1_results, binned_v2_matched,
 						  on = [:chr, :strand, :bin],
 						  makeunique = true,
 						  renamecols = :_v1 => :_v2)
+  ╠═╡ =#
 
 # ╔═╡ 0697fd84-432e-401b-97c3-dc56b0cccbff
+#=╠═╡
 begin
 	local f = Figure()
-	ax = Axis(f[1, 1],
-			  aspect = 1)
+	local ax = Axis(f[1, 1],
+			  	    aspect = 1)
 
 	local a, p, r = auprc(v1_v2_matched.predicted_v1,
 	      		          Int.(v1_v2_matched.modified_v1),
@@ -303,12 +456,59 @@ begin
 	
 	f
 end
+  ╠═╡ =#
+
+# ╔═╡ e48d049b-4297-4c1e-9162-85f947d1dc20
+#=╠═╡
+begin
+	local f = Figure()
+	local ax = Axis(f[1, 1],
+			  aspect = 1)
+
+	local df = leftjoin(v1_v2_common, glori,
+						on = [:chr_v2 => :chrom,
+							  :strand_v2 => :strand,
+							  :genomicPos_v2 => :pos])
+	df[:, :modified] = ifelse.(df.modified .=== missing, 0, df.modified)
+	df = df[df.GMM_pvalue_v1 .!== missing .&& df.GMM_chi2_pvalue_v2 .!== missing, :]
+
+	local a, p, r = auprc(-log10.(ifelse.(abs.(df.GMM_LOR_v1) .< 0.5,
+								  		  1,
+								  		  df.GMM_pvalue_v1)),
+	      		          Int.(df.modified),
+	            	      Set([1]))
+	lines!(ax, r, p,
+	       label = "v1 AUC=$(round(a; digits = 2))",
+	       color = :black)
+
+	local a, p, r = auprc(-log10.(ifelse.(abs.(df.GMM_LOR_v2) .< 0.5,
+										  1,
+										  df.GMM_chi2_pvalue_v2)),
+	      		          Int.(df.modified),
+	            	      Set([1]))
+	lines!(ax, r, p,
+	       label = "v2 AUC=$(round(a; digits = 2))",
+	       color = COL_RNA002)
+	f
+	# df
+end
+  ╠═╡ =#
+
+# ╔═╡ 91c41c2e-5ae1-4cb2-86b9-d4fb953570d1
+#=╠═╡
+leftjoin(v1_v2_common, glori,
+		 on = [:chr_v1 => :chrom, :strand_v1 => :strand, :genomicPos_v1 => :pos])
+  ╠═╡ =#
 
 # ╔═╡ 2f1d642b-d646-416d-9550-bbe30f2044a1
+#=╠═╡
 scatter(v1_v2_matched.predicted_v1, v1_v2_matched.predicted_v2, markersize = 5)
+  ╠═╡ =#
 
 # ╔═╡ 53df2546-878c-4027-bb5b-6f8a4af5bb5f
+#=╠═╡
 cor(v1_v2_matched.predicted_v1, v1_v2_matched.predicted_v2)
+  ╠═╡ =#
 
 # ╔═╡ b94447fc-762a-43b8-9e0c-987064a62618
 begin
@@ -329,6 +529,7 @@ begin
 end
 
 # ╔═╡ 31b0f531-c921-46b2-aada-87098aa16d97
+#=╠═╡
 begin
 	f = Figure(size = (1400, 800))
 
@@ -374,18 +575,83 @@ begin
 
 	# axislegend(ax_a1, "Version", position = :lb, labelsize = 12)
 
+	# ==== TOP ROW =====
 
-	ax_a2 = Axis(ga[1, 1:2],
+	# Top left (correlation between v1 and v2)
+
+	ax_a = Axis(ga[1, 1:2],
 		       aspect = 1,
 		       title = "Correlation between v1 and v2",
 		       xlabel = "v1: -log₁₀(𝑃-value)",
 		       ylabel = "v2: -log₁₀(𝑃-value)")
 
-	scatter!(ax_a2,
+	scatter!(ax_a,
 			 v1_v2_matched.predicted_v1,
 			 v1_v2_matched.predicted_v2,
 			 markersize = 5,
 			 color = :black)
+
+	# Top right (performance evaluation barplots)
+
+	local ax_collapse = Axis(gb[1, 1],
+							 aspect = 1/2.6,
+							 title = "Preprocessing\ntime",
+							 #titlesize = 13,
+							 ylabel = "Execution time (s) / transcript",
+							 xticks = ([1, 2], ["v1", "v2"]),
+							  	 yticks = 0:0.5:2.5)
+	ylims!(ax_collapse, (-0.1, 2.7))
+	local ax_comp = Axis(gb[1, 2],
+						 aspect = 1/2.6,
+						 title = "Analysis\ntime",
+						 ylabel = "Execution time (s) / transcript",
+						 xticks = ([1, 2], ["v1", "v2"]),
+						 yticks = 0:5:30)
+	ylims!(ax_comp, (-1, 31))
+	local ax_space = Axis(gb[1, 3],
+						  aspect = 1/2.6,
+						  title = "Preprocessing\ndisk space",
+						  ylabel = "Disk space (GB) / 1 million reads",
+						  xticks = ([1, 2], ["v1", "v2"]),
+						  yticks = 10:10:60)
+	ylims!(ax_space, (-1, 67))
+	local ax_space2 = Axis(gb[1, 4],
+					 	   aspect = 1/2.6,
+						   title = "Analysis\ndisk space",
+						   ylabel = "Disk space (MB) / 1,000 tested sites",
+						   xticks = ([1, 2], ["v1", "v2"]),
+						   yticks = 0:5:20)
+	ylims!(ax_space2, (-0.05, 22.2))
+
+	local t1 = (35*60+3)/1000
+	local t2 = (7*60)/1000
+	barplot!(ax_collapse,
+			 #[(35*60+3)/60, (7*60)/60],
+			 [t1, t2],
+			 color = :black,
+			 bar_labels = ["$(@sprintf("%.2f", t1))s",
+						   "$(@sprintf("%.2f", t2))s"])
+	
+	local t1 = (59*60+57)/136
+	local t2 = (3*60+21)/136
+	barplot!(ax_comp,
+			 # [59u"minute" + 57u"s", 3u"minute" + 21u"s"],
+			 # [(59*60+57)/60, (3*60+21)/60],
+			 [t1, t2],
+			 color = :black,
+			 bar_labels = ["$(@sprintf("%.2f", t1))s",
+						   "$(@sprintf("%.2f", t2))s"])
+
+	barplot!(ax_space,
+			 [55.52, 19.43],
+			 color = :black,
+			 bar_labels = ["56GB", "19GB"])
+
+	barplot!(ax_space2,
+			 [17, 1],
+			 color = :black,
+			 bar_labels = ["17MB", "1MB"])
+	
 
 	# # == Total counts, second row left
 	# local ax_totals = Axis(gx[1, 1],
@@ -394,6 +660,7 @@ begin
 	# 					 ylabel = "Count",
 	# 					 xticks = ([1, 2], ["RNA002", "RNA004"]))
 	# 					 # yticks = 0:5:30)
+
 	local roc002 = roc(binned_rna002.modified .== 1,
 			     	   binned_rna002.predicted .>= -log10(0.01))
 	local roc004 = roc(binned_rna004.modified .== 1,
@@ -461,24 +728,24 @@ begin
 	a, p, r = auprc(binned_rna002.predicted,
 	                Int.(binned_rna002.modified),
 	                Set([1]))
-	lines!(ax_c, r, p,
+	lines!(ax_c, r[5:end], p[5:end],
 	       label = "RNA002\nAUC=$(round(a; digits = 2))",
 	       color = COL_RNA002)
 	p001 = precision(roc(binned_rna002.modified,
-			     binned_rna002.predicted .>= -log10(0.01)))
+			    		 binned_rna002.predicted .>= -log10(0.01)))
 	r001 = recall(roc(binned_rna002.modified,
-	    		  binned_rna002.predicted .>= -log10(0.01)))
+	    			  binned_rna002.predicted .>= -log10(0.01)))
 	scatter!(ax_c, [r001], [p001], color = COL_RNA002)
 	println("RNA002 precision = $p001, recall = $r001")
 	
 	a, p, r = auprc(binned_rna004.predicted,
 	                Int.(binned_rna004.modified),
 	                Set([1]))
-	lines!(ax_c, r, p,
+	lines!(ax_c, r[5:end], p[5:end],
 	       label = "RNA004\nAUC=$(round(a; digits = 2))",
 	       color = COL_RNA004)
 	p001 = precision(roc(binned_rna004.modified,
-			     binned_rna004.predicted .>= -log10(0.01)))
+			    		 binned_rna004.predicted .>= -log10(0.01)))
 	r001 = recall(roc(binned_rna004.modified,
 	    		  binned_rna004.predicted .>= -log10(0.01)))
 	scatter!(ax_c, [r001], [p001], color = COL_RNA004)
@@ -487,14 +754,14 @@ begin
 	axislegend(ax_c, "Chemistry", position = :rt, labelsize = 12)
 	
 	# ==== Same coverage (c) =====
-	ax_d1 = Axis(gd[1, 1],
+	ax_d1 = Axis(gd[1, 1:2],
 	             title = "Precision at equal coverage",
 	             xlabel = "Depth",
 	             xticks = (1:3, ["100", "500", "1000"]),
 	             ylabel = "Precision",
 	             yticks = [0, 0.25, 0.5, 0.75, 1.0])
 	ylims!(ax_d1, [0, 1.15])
-	ax_d2 = Axis(gd[1, 2],
+	ax_d2 = Axis(gd[1, 3:4],
 	             title = "Recall at equal coverage",
 	             xlabel = "Depth",
 	             xticks = (1:3, ["100", "500", "1000"]),
@@ -566,93 +833,37 @@ begin
 			 label_size = 11)
 
 	
-	Legend(f[2, 9],
+	Legend(ge[2, 1],
 		   [LineElement(color = :black, linestyle = :solid),
 		    LineElement(color = :black, linestyle = :dash)],
-		   ["GLORI\nreference", "Nanocompore\ndetected"],
+		   ["GLORI", "Nanocompore"],
 		   valign = :top,
-		   halign = :left)
+		   halign = :center,
+		   orientation = :horizontal)
 	
-	Legend(f[2, 9],
+	Legend(gd[2, 4],
 	       [PolyElement(color = COL_RNA002),
 			PolyElement(color = COL_RNA004)],
 	       ["RNA002", "RNA004"],
 		   valign = :center,
-		   halign = :left)
-
-
-	local ax_collapse = Axis(gb[1, 1],
-							 aspect = 1/2.6,
-							 title = "Preprocessing\ntime",
-							 #titlesize = 13,
-							 ylabel = "Execution time (s) / transcript",
-							 xticks = ([1, 2], ["v1", "v2"]),
-							  	 yticks = 0:0.5:2.5)
-	ylims!(ax_collapse, (-0.1, 2.7))
-	local ax_comp = Axis(gb[1, 2],
-						 aspect = 1/2.6,
-						 title = "Analysis\ntime",
-						 ylabel = "Execution time (s) / transcript",
-						 xticks = ([1, 2], ["v1", "v2"]),
-						 yticks = 0:5:30)
-	ylims!(ax_comp, (-1, 31))
-	local ax_space = Axis(gb[1, 3],
-						  aspect = 1/2.6,
-						  title = "Preprocessing\ndisk space",
-						  ylabel = "Disk space (GB) / 1 million reads",
-						  xticks = ([1, 2], ["v1", "v2"]),
-						  yticks = 10:10:60)
-	ylims!(ax_space, (-1, 67))
-	local ax_space2 = Axis(gb[1, 4],
-					 	   aspect = 1/2.6,
-						   title = "Analysis\ndisk space",
-						   ylabel = "Disk space (MB) / 1,000 tested sites",
-						   xticks = ([1, 2], ["v1", "v2"]),
-						   yticks = 0:5:20)
-	ylims!(ax_space2, (-0.05, 22.2))
-
-	local t1 = (35*60+3)/1000
-	local t2 = (7*60)/1000
-	barplot!(ax_collapse,
-			 #[(35*60+3)/60, (7*60)/60],
-			 [t1, t2],
-			 color = :black,
-			 bar_labels = ["$(@sprintf("%.2f", t1))s",
-						   "$(@sprintf("%.2f", t2))s"])
+		   halign = :right,
+		   orientation = :horizontal)
 	
-	local t1 = (59*60+57)/136
-	local t2 = (3*60+21)/136
-	barplot!(ax_comp,
-			 # [59u"minute" + 57u"s", 3u"minute" + 21u"s"],
-			 # [(59*60+57)/60, (3*60+21)/60],
-			 [t1, t2],
-			 color = :black,
-			 bar_labels = ["$(@sprintf("%.2f", t1))s",
-						   "$(@sprintf("%.2f", t2))s"])
-
-	barplot!(ax_space,
-			 [55.52, 19.43],
-			 color = :black,
-			 bar_labels = ["56GB", "19GB"])
-
-	barplot!(ax_space2,
-			 [17, 1],
-			 color = :black,
-			 bar_labels = ["17MB", "1MB"])
 
 	
 	# ==== D2: RNA002/RNA002 barplot & venn ====
-	ax_glori = Axis(gd[2, 1:2][2, 1],
+	ax_glori = Axis(gd[3, 1:4][2, 1],
 		    yticks = (1:2, ["RNA002", "RNA004"]),
 		    xlabel = "m⁶A sites in GLORI",
 		    xticks = [0, 50000, 100000],
 		    xtickformat = "{:n}",
 		    height = 75)
-	xlims!(ax_glori, (0, 110000))
+	# xlims!(ax_glori, (0, 110000))
+	xlims!(ax_glori, (0, nrow(glori)))
 	
-	ax_venn = Axis(ge[2, 1],
+	ax_venn = Axis(ge[3, 1],
 	               title = "Overlap of true positives",
-   	               height = 100)
+   	               height = 76)
 	
 	# ax22 = Axis(f[1, 3:6][2, 2],
 	#             xlabel = "GLORI modification stoichiometry",
@@ -723,13 +934,15 @@ begin
 	
 	# axislegend(ax_d_bl, [PolyElement(color = :lightgreen)], ["TP"]; position=:rt)
 	# ax_d_bl = Axis(gd[2, 1][2, 1],
-	Legend(gd[2, 1:2][1, 1],
+	Legend(gd[2, 1:3][1, 1],
 		   [PolyElement(color = :black),
 			PolyElement(color = :grey),
 			PolyElement(color = :lightgreen)],
 	       ["no coverage", "false negatives", "true positives"],
 		   orientation = :horizontal,
-		   framevisible = false)
+		   framevisible = false,
+		   valign = :center,
+		   halign = :left)
 	
 	# rowsize!(f.layout, 1, Relative(0.75))
 	
@@ -767,7 +980,7 @@ begin
 				ylabel = "Density",)
 	
 	density!(ax_stoich,
-		     glori.mean_m6A_level,
+		     glori.ratio,
 	         color = (COL_RNA004, 0),
 	         strokecolor = :black,
 	         strokewidth = 1,
@@ -775,10 +988,12 @@ begin
 		     linestyle = :solid,
 	         label = "Overall")
 	density!(ax_stoich,
-	         leftjoin(rna002[rna002.modified .== 1, :],
-	                  glori,
-	                  on = [:chr => :chrom, :strand => :strand, :genomicPos => :pos],
-	                  makeunique = true).mean_m6A_level,
+	         # leftjoin(rna002[rna002.modified .== 1, :],
+	         #          binned_glori,
+	         #          on = [:chr, :strand, :bin],
+	         #          makeunique = true).ratio,
+			 innerjoin(glori, ref002[:, [:chr, :strand, :genomicPos]],
+					   on = [:chrom => :chr, :strand, :start => :genomicPos]).ratio,
 	         color = (COL_RNA002, 0),
 	         strokecolor = COL_RNA002,
 	         strokewidth = 1,
@@ -787,10 +1002,10 @@ begin
 	         # boundary = (0, 1),
 	         label = "RNA002")
 	density!(ax_stoich,
-	         leftjoin(rna002[rna002.modified .== 1 .&& rna002.predicted .>= -log10(0.01), :],
-	                  glori,
-	                  on = [:chr => :chrom, :strand => :strand, :genomicPos => :pos],
-	                  makeunique = true).mean_m6A_level,
+	         innerjoin(rna002[rna002.modified .== 1 .&& rna002.predicted .>= -log10(0.01), :],
+	                  binned_glori,
+	                  on = [:chr, :strand, :bin],
+	                  makeunique = true).ratio,
 	         color = (COL_RNA002, 0),
 	         strokecolor = COL_RNA002,
 	         strokewidth = 2,
@@ -799,10 +1014,12 @@ begin
 	         # boundary = (0, 1),
 	         label = "RNA002")
 	density!(ax_stoich,
-	         leftjoin(rna004[rna004.modified .== 1, :],
-	                  glori,
-	                  on = [:chr => :chrom, :strand => :strand, :genomicPos => :pos],
-	                  makeunique = true).mean_m6A_level,
+	         # leftjoin(rna004[rna004.modified .== 1, :],
+	         #          glori,
+	         #          on = [:chr, :strand, :bin],
+	         #          makeunique = true).ratio,
+			 innerjoin(glori, ref004[:, [:chr, :strand, :genomicPos]],
+					   on = [:chrom => :chr, :strand, :start => :genomicPos]).ratio,
 	         color = (COL_RNA004, 0),
 	         strokecolor = COL_RNA004,
 	         strokewidth = 1,
@@ -810,10 +1027,10 @@ begin
 		     linestyle = :solid,
 	         label = "RNA004")
 	density!(ax_stoich,
-	         leftjoin(rna004[rna004.modified .== 1 .&& rna004.predicted .>= -log10(0.01), :],
-	                  glori,
-	                  on = [:chr => :chrom, :strand => :strand, :genomicPos => :pos],
-	                  makeunique = true).mean_m6A_level,
+	         innerjoin(rna004[rna004.modified .== 1 .&& rna004.predicted .>= -log10(0.01), :],
+	                  binned_glori,
+	                  on = [:chr, :strand, :bin],
+	                  makeunique = true).ratio,
 	         color = (COL_RNA004, 0),
 	         strokecolor = COL_RNA004,
 	         strokewidth = 2,
@@ -832,25 +1049,78 @@ begin
 	hidespines!(ax_venn)
 	f
 end
+  ╠═╡ =#
 
 # ╔═╡ af54cf26-5304-4250-a21c-61b08871defa
 begin
 	local f = Figure(size = (640, 340))
+	# local ax_collapse = Axis(f[1, 1],
+	# 						 aspect = 1/2.6,
+	# 						 title = "Preprocessing\ntime",
+	# 						 #titlesize = 13,
+	# 						 ylabel = "Execution time (m) / 1,000 transcripts",
+	# 						 xticks = ([1, 2], ["v1", "v2"]),
+	# 					  	 yticks = 0:100:450)
+	# ylims!(ax_collapse, (-1, 500))
+	# local ax_comp = Axis(f[1, 2],
+	# 					 aspect = 1/2.6,
+	# 					 title = "Analysis\ntime",
+	# 					 ylabel = "Execution time (m) / 1,000 transcripts",
+	# 					 xticks = ([1, 2], ["v1", "v2"]),
+	# 					 yticks = 0:100:450)
+	# ylims!(ax_comp, (-1, 500))
+	# local ax_space = Axis(f[1, 3],
+	# 					  aspect = 1/2.6,
+	# 					  title = "Preprocessing\ndisk space",
+	# 					  ylabel = "Disk space (GB) / 1 million reads",
+	# 					  xticks = ([1, 2], ["v1", "v2"]),
+	# 					  yticks = 10:10:60)
+	# ylims!(ax_space, (-1, 67))
+	# local ax_space2 = Axis(f[1, 4],
+	# 				 	   aspect = 1/2.6,
+	# 					   title = "Analysis\ndisk space",
+	# 					   ylabel = "Disk space (MB) / 1,000 tested sites",
+	# 					   xticks = ([1, 2], ["v1", "v2"]),
+	# 					   yticks = 0:5:20)
+	# ylims!(ax_space2, (-0.05, 22.2))
+
+	# barplot!(ax_collapse,
+	# 		 [(35*60+3)/60, (7*60)/60],
+	# 		 color = :black,
+	# 		 bar_labels = ["35m", "7m"])
+	
+	# barplot!(ax_comp,
+	# 		 # [59u"minute" + 57u"s", 3u"minute" + 21u"s"],
+	# 		 # [(59*60+57)/60, (3*60+21)/60],
+	# 		 [441, 22],
+	# 		 color = :black,
+	# 		 bar_labels = ["441m", "22m"])
+
+	# barplot!(ax_space,
+	# 		 [55.52, 19.43],
+	# 		 color = :black,
+	# 		 bar_labels = ["56GB", "19GB"])
+
+	# barplot!(ax_space2,
+	# 		 [17, 1],
+	# 		 color = :black,
+	# 		 bar_labels = ["17MB", "1MB"])
+
 	local ax_collapse = Axis(f[1, 1],
 							 aspect = 1/2.6,
 							 title = "Preprocessing\ntime",
 							 #titlesize = 13,
-							 ylabel = "Execution time (m) / 1,000 transcripts",
+							 ylabel = "Execution time (s) / transcript",
 							 xticks = ([1, 2], ["v1", "v2"]),
-						  	 yticks = 0:100:450)
-	ylims!(ax_collapse, (-1, 500))
+							  	 yticks = 0:0.5:2.5)
+	ylims!(ax_collapse, (-0.1, 2.7))
 	local ax_comp = Axis(f[1, 2],
 						 aspect = 1/2.6,
 						 title = "Analysis\ntime",
-						 ylabel = "Execution time (m) / 1,000 transcripts",
+						 ylabel = "Execution time (s) / transcript",
 						 xticks = ([1, 2], ["v1", "v2"]),
-						 yticks = 0:100:450)
-	ylims!(ax_comp, (-1, 500))
+						 yticks = 0:5:30)
+	ylims!(ax_comp, (-1, 31))
 	local ax_space = Axis(f[1, 3],
 						  aspect = 1/2.6,
 						  title = "Preprocessing\ndisk space",
@@ -866,17 +1136,24 @@ begin
 						   yticks = 0:5:20)
 	ylims!(ax_space2, (-0.05, 22.2))
 
+	local t1 = (35*60+3)/1000
+	local t2 = (7*60)/1000
 	barplot!(ax_collapse,
-			 [(35*60+3)/60, (7*60)/60],
+			 #[(35*60+3)/60, (7*60)/60],
+			 [t1, t2],
 			 color = :black,
-			 bar_labels = ["35m", "7m"])
+			 bar_labels = ["$(@sprintf("%.2f", t1))s",
+						   "$(@sprintf("%.2f", t2))s"])
 	
+	local t1 = (59*60+57)/136
+	local t2 = (3*60+21)/136
 	barplot!(ax_comp,
 			 # [59u"minute" + 57u"s", 3u"minute" + 21u"s"],
 			 # [(59*60+57)/60, (3*60+21)/60],
-			 [441, 22],
+			 [t1, t2],
 			 color = :black,
-			 bar_labels = ["441m", "22m"])
+			 bar_labels = ["$(@sprintf("%.2f", t1))s",
+						   "$(@sprintf("%.2f", t2))s"])
 
 	barplot!(ax_space,
 			 [55.52, 19.43],
@@ -893,12 +1170,115 @@ begin
 	f	
 end
 
-# ╔═╡ 1bf0d919-e85f-4858-87bb-72ca0f49f4ac
-binned_rna002_1000
+# ╔═╡ eee69a22-1144-4215-ac6b-ce31937a60bd
+begin
+	local df002 = copy(binned_rna002[:, [:predicted, :modified, :ratio]])
+	local df004 = copy(binned_rna004[:, [:predicted, :modified, :ratio]])
+	df002[:, :ratio] = ifelse.(df002.ratio .=== missing, 0, df002.ratio)
+	df002[:, :chemistry] .= "rna002"
+	df004[:, :ratio] = ifelse.(df004.ratio .=== missing, 0, df004.ratio)
+	df004[:, :chemistry] .= "rna004"
+
+	local df = vcat(df002, df004)
+	df[:, :ratio_bin] = map(r -> div(100*r, 10)*10, df.ratio)
+	df = combine(groupby(df, [:chemistry, :ratio_bin]),
+				 nrow => :count,
+		   		 [:predicted, :modified] => ((p, m) -> recall(roc(m, p .>= 2))) => :recall)
+
+	sort!(df, [:chemistry, :ratio_bin])
+
+	# local f = Figure()
+	# local ax = Axis(f[1, 1])
+
+	# barplot!(ax,
+	# 		 df.ratio_bin,
+	# 		 df.recall,
+	# 		 color = ifelse.(df.chemistry .== "rna002", 0, 1),
+	# 	     dodge = ifelse.(df.chemistry .== "rna002", 0, 1))
+
+	# f
+
+	# data(df) * mapping(:recall, color = :chemistry, dodge = :chemistry) * frequency() |> draw
+	data(df) * mapping(:ratio_bin => "Stoichiometry", :recall => "Recall", color = :chemistry) * (visual(Lines) + visual(Scatter)) |> draw(scales(Color = (; palette = [COL_RNA002, COL_RNA004])))
+end
+
+# ╔═╡ 7c45dd08-df7b-44aa-a8c4-4895d73e4bd9
+binned_rna004[binned_rna004.modified .=== 1 .&& binned_rna004.ratio .> 0.9 .&& binned_rna004.predicted .< 2, :]
+
+# ╔═╡ ec46df8d-4a25-4fe6-b82b-9292c8d345ef
+minimum(skipmissing([missing]), init = 1)
+
+# ╔═╡ 3c8398c3-9186-4cb3-89fd-95edd5f94d94
+begin
+	# local df = binned_rna004[binned_rna004.modified .=== 1 .&& binned_rna004.ratio .> 0.9, :]
+	local df = binned_rna004[binned_rna004.modified .=== 1 .&& binned_rna004.ratio .> 0.9 .&& binned_rna004.ratio .< 1, :]
+	sum(df.GMM_chi2_pvalue .=== missing) / nrow(df)
+end
+
+# ╔═╡ e25b7e46-9ea3-4210-a661-b55e69b8fc2c
+# rna004[rna004.bin .== 102743, :]
+rna004[rna004.bin .== 137185, :]
+
+# ╔═╡ 35650746-09b3-4529-ab73-28769d178437
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	local v1_results_part1 = read_results(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
+		"GMM_pvalue",
+		shift = 2,
+		genomic_collapse = false;
+		LOR_threshold = 0)
+	local v1_results_part2 = read_results(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/outnanocompore_results_gx.tsv",
+		"GMM_pvalue",
+		shift = 2,
+		genomic_collapse = false;
+		LOR_threshold = 0)
+
+	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
+	
+	# v1_results = annotate_results(vcat(v1_results_part1, v1_results_part2),
+	# 							  ref002)
+	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
+
+	# Correct for multiple testing
+	local present = v1_results.GMM_pvalue .!== missing
+	local qvals = MultipleTesting.adjust(
+		disallowmissing(v1_results[present, :].GMM_pvalue),
+		MultipleTesting.BenjaminiHochberg())
+	v1_results[!, :GMM_qvalue] = copy(v1_results.GMM_pvalue)
+	v1_results[present, :GMM_qvalue] .= qvals
+
+	lor_corrected_significance = ifelse.(abs.(v1_results[!, :GMM_LOR]) .>= LOR_THRESHOLD, v1_results[!, :GMM_qvalue], 1.0)
+	v1_results[!, :predicted] = -log10.(lor_corrected_significance)
+	
+	v1_results
+end
+  ╠═╡ =#
+
+# ╔═╡ 3ec16ac1-dbec-4ce9-af4d-a913bdc68222
+#=╠═╡
+begin
+	local v1_results_part1 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
+		delim = '\t'))
+
+	local v1_results_part2 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/out_nanocompore_results_manual_db_export2.tsv",
+		delim = '\t'))
+
+	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
+	
+	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
+	
+end
+  ╠═╡ =#
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
@@ -909,6 +1289,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+AlgebraOfGraphics = "~0.10.2"
 CSV = "~0.10.15"
 CairoMakie = "~0.13.6"
 DataFrames = "~1.7.0"
@@ -923,7 +1304,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "c7883652ffaa215baf72f0cb836f0f691e6dc400"
+project_hash = "2d72d72b0cd446ffe9f1ea0d8f6693826a99594b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -941,6 +1322,30 @@ git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
 uuid = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 version = "0.4.5"
 
+[[deps.Accessors]]
+deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
+git-tree-sha1 = "3b86719127f50670efe356bc11073d84b4ed7a5d"
+uuid = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
+version = "0.1.42"
+
+    [deps.Accessors.extensions]
+    AxisKeysExt = "AxisKeys"
+    IntervalSetsExt = "IntervalSets"
+    LinearAlgebraExt = "LinearAlgebra"
+    StaticArraysExt = "StaticArrays"
+    StructArraysExt = "StructArrays"
+    TestExt = "Test"
+    UnitfulExt = "Unitful"
+
+    [deps.Accessors.weakdeps]
+    AxisKeys = "94b1ba4f-4ee9-5380-92f1-94cde586c3c5"
+    IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+    StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+    StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
 git-tree-sha1 = "f7817e2e585aa6d924fd714df1e2a84be7896c60"
@@ -956,6 +1361,20 @@ weakdeps = ["SparseArrays", "StaticArrays"]
 git-tree-sha1 = "7e651ea8d262d2d74ce75fdf47c4d63c07dba7a6"
 uuid = "35492f91-a3bd-45ad-95db-fcad7dcfedb7"
 version = "1.2.0"
+
+[[deps.AlgebraOfGraphics]]
+deps = ["Accessors", "Colors", "Dates", "Dictionaries", "FileIO", "GLM", "GeoInterface", "GeometryBasics", "GridLayoutBase", "Isoband", "KernelDensity", "Loess", "Makie", "NaturalSort", "PlotUtils", "PolygonOps", "PooledArrays", "PrecompileTools", "RelocatableFolders", "StatsBase", "StructArrays", "Tables"]
+git-tree-sha1 = "90983916b063f36f585f9f54b06e7fc50dfe49e8"
+uuid = "cbdf2221-f076-402e-a563-3d30da359d67"
+version = "0.10.2"
+
+    [deps.AlgebraOfGraphics.extensions]
+    AlgebraOfGraphicsDynamicQuantitiesExt = "DynamicQuantities"
+    AlgebraOfGraphicsUnitfulExt = "Unitful"
+
+    [deps.AlgebraOfGraphics.weakdeps]
+    DynamicQuantities = "06fc5a27-2a28-4c7c-a15d-362465fb6821"
+    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [[deps.AliasTables]]
 deps = ["PtrArrays", "Random"]
@@ -1119,6 +1538,15 @@ deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
 version = "1.1.1+0"
 
+[[deps.CompositionsBase]]
+git-tree-sha1 = "802bb88cd69dfd1509f6670416bd4434015693ad"
+uuid = "a33af91c-f02d-484b-be07-31d278c5ca2b"
+version = "0.1.2"
+weakdeps = ["InverseFunctions"]
+
+    [deps.CompositionsBase.extensions]
+    CompositionsBaseInverseFunctionsExt = "InverseFunctions"
+
 [[deps.ConstructionBase]]
 git-tree-sha1 = "76219f1ed5771adbb096743bff43fb5fdd4c1157"
 uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
@@ -1172,6 +1600,23 @@ deps = ["AdaptivePredicates", "EnumX", "ExactPredicates", "Random"]
 git-tree-sha1 = "5620ff4ee0084a6ab7097a27ba0c19290200b037"
 uuid = "927a84f5-c5f4-47a5-9785-b46e178433df"
 version = "1.6.4"
+
+[[deps.Dictionaries]]
+deps = ["Indexing", "Random", "Serialization"]
+git-tree-sha1 = "a86af9c4c4f33e16a2b2ff43c2113b2f390081fa"
+uuid = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
+version = "0.4.5"
+
+[[deps.Distances]]
+deps = ["LinearAlgebra", "Statistics", "StatsAPI"]
+git-tree-sha1 = "c7e3a542b999843086e2f29dac96a618c105be1d"
+uuid = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+version = "0.10.12"
+weakdeps = ["ChainRulesCore", "SparseArrays"]
+
+    [deps.Distances.extensions]
+    DistancesChainRulesCoreExt = "ChainRulesCore"
+    DistancesSparseArraysExt = "SparseArrays"
 
 [[deps.Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -1341,6 +1786,12 @@ deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 version = "1.11.0"
 
+[[deps.GLM]]
+deps = ["Distributions", "LinearAlgebra", "Printf", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns", "StatsModels"]
+git-tree-sha1 = "273bd1cd30768a2fddfa3fd63bbc746ed7249e5f"
+uuid = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
+version = "1.9.0"
+
 [[deps.GeoFormatTypes]]
 git-tree-sha1 = "8e233d5167e63d708d41f87597433f59a0f213fe"
 uuid = "68eda718-8dee-11e9-39e7-89f7f65f511f"
@@ -1446,6 +1897,11 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "0936ba688c6d201805a83da835b55c61a180db52"
 uuid = "905a6f67-0a94-5f89-b386-d35d92009cd1"
 version = "3.1.11+0"
+
+[[deps.Indexing]]
+git-tree-sha1 = "ce1566720fd6b19ff3411404d4b977acd4814f9f"
+uuid = "313cdc1a-70c2-5d6a-ae34-0150d3930a38"
+version = "1.1.1"
 
 [[deps.IndirectArrays]]
 git-tree-sha1 = "012e604e1c7458645cb8b436f8fba789a51b257f"
@@ -1703,6 +2159,12 @@ deps = ["Libdl", "OpenBLAS_jll", "libblastrampoline_jll"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 version = "1.11.0"
 
+[[deps.Loess]]
+deps = ["Distances", "LinearAlgebra", "Statistics", "StatsAPI"]
+git-tree-sha1 = "f749e7351f120b3566e5923fefdf8e52ba5ec7f9"
+uuid = "4345ca2d-374a-55d4-8d30-97f9976e7612"
+version = "0.6.4"
+
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
 git-tree-sha1 = "13ca9e2586b89836fd20cccf56e57e2b9ae7f38f"
@@ -1804,6 +2266,11 @@ deps = ["OpenLibm_jll"]
 git-tree-sha1 = "9b8215b1ee9e78a293f99797cd31375471b2bcae"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "1.1.3"
+
+[[deps.NaturalSort]]
+git-tree-sha1 = "eda490d06b9f7c00752ee81cfa451efe55521e21"
+uuid = "c020b1a1-e9b0-503a-9c33-f039bfc54a85"
+version = "1.0.0"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore", "ImageMetadata"]
@@ -2113,6 +2580,11 @@ deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 version = "1.11.0"
 
+[[deps.ShiftedArrays]]
+git-tree-sha1 = "503688b59397b3307443af35cd953a13e8005c16"
+uuid = "1277b4bf-5013-50f5-be3d-901d8477a67a"
+version = "2.0.0"
+
 [[deps.Showoff]]
 deps = ["Dates", "Grisu"]
 git-tree-sha1 = "91eddf657aca81df9ae6ceb20b959ae5653ad1de"
@@ -2222,6 +2694,12 @@ weakdeps = ["ChainRulesCore", "InverseFunctions"]
     [deps.StatsFuns.extensions]
     StatsFunsChainRulesCoreExt = "ChainRulesCore"
     StatsFunsInverseFunctionsExt = "InverseFunctions"
+
+[[deps.StatsModels]]
+deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsAPI", "StatsBase", "StatsFuns", "Tables"]
+git-tree-sha1 = "9022bcaa2fc1d484f1326eaa4db8db543ca8c66d"
+uuid = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+version = "0.7.4"
 
 [[deps.StringManipulation]]
 deps = ["PrecompileTools"]
@@ -2538,19 +3016,34 @@ version = "3.6.0+0"
 # ╠═9ea0a845-e839-411c-99ad-051979516cb5
 # ╠═725002c7-b937-4240-bbb0-22bd28972e90
 # ╠═35650746-09b3-4529-ab73-28769d178437
+# ╠═3ec16ac1-dbec-4ce9-af4d-a913bdc68222
+# ╠═cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
+# ╠═a50423b1-d847-4429-9bb9-9d8a7523a459
+# ╠═884239d8-5613-44bc-a14c-348b3e31d3c3
+# ╠═866b5d33-c2a7-4400-845e-50575053be71
+# ╠═9193fd14-d45c-4534-a029-75ab8171ea40
+# ╠═7a74c048-770c-4782-9c19-ab800f66b7e1
 # ╠═96a61659-2925-44ce-ae5a-a2e0c6f7b0f4
+# ╠═9054c2f0-7050-4bb9-bd10-da57ec7fa69c
 # ╠═9b8efe40-93b3-4dc9-8a01-ac06eae5024e
 # ╠═99b9d173-618d-4fd2-9bda-89d6e991711b
-# ╠═cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
+# ╠═095e0c0f-2af2-4dc1-b852-bb554d1d8af1
 # ╠═dc4ee9d0-7c6a-49fd-aa99-1fe3b5cb3f87
 # ╠═d891c628-9785-400b-bdc4-bbc9831850f9
 # ╠═0e079cb8-3014-4149-ab6d-38f4ed3c256d
 # ╠═0697fd84-432e-401b-97c3-dc56b0cccbff
+# ╠═e48d049b-4297-4c1e-9162-85f947d1dc20
+# ╠═91c41c2e-5ae1-4cb2-86b9-d4fb953570d1
 # ╠═2f1d642b-d646-416d-9550-bbe30f2044a1
 # ╠═53df2546-878c-4027-bb5b-6f8a4af5bb5f
 # ╠═b94447fc-762a-43b8-9e0c-987064a62618
 # ╠═31b0f531-c921-46b2-aada-87098aa16d97
 # ╠═af54cf26-5304-4250-a21c-61b08871defa
-# ╠═1bf0d919-e85f-4858-87bb-72ca0f49f4ac
+# ╠═71667c1d-cf1a-43a6-b3a6-ffafd87fc069
+# ╠═eee69a22-1144-4215-ac6b-ce31937a60bd
+# ╠═7c45dd08-df7b-44aa-a8c4-4895d73e4bd9
+# ╠═ec46df8d-4a25-4fe6-b82b-9292c8d345ef
+# ╠═3c8398c3-9186-4cb3-89fd-95edd5f94d94
+# ╠═e25b7e46-9ea3-4210-a661-b55e69b8fc2c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

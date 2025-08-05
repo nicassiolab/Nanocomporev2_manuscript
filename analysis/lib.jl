@@ -19,7 +19,7 @@ using Printf
 
 
 BIN_SIZE = 9
-LOR_THRESHOLD = 0.5
+LOR_THRESHOLD = 0.8
 
 COL_RNA002 = "#56B4E9"
 COL_RNA004 = "#009E73"
@@ -63,7 +63,7 @@ function read_results(filepath, col; shift = 0, genomic_collapse = true, LOR_thr
                    [:predicted, :GMM_LOR] => col_selector => :GMM_LOR,
                    :predicted_raw => maximum => :predicted_raw,
                    [:predicted_raw, :GMM_LOR] => col_selector => :GMM_LOR_raw,
-                   [n => minimum => n for n in qvals]...,
+                   [n => (vs -> minimum(skipmissing(vs), init = 1.0)) => n for n in qvals]...,
                    additional_cols...)
   end
   df
@@ -74,14 +74,16 @@ function annotate_results(results, ref)
 			  results,
 			  on=["chr", "strand", "genomicPos"],
 			  makeunique=true)
-	joined[ismissing.(joined[!, "predicted"]), "predicted"] .= 0
-	joined[ismissing.(joined[!, "GMM_LOR"]), "GMM_LOR"] .= 0
-	joined[ismissing.(joined[!, "predicted_raw"]), "predicted_raw"] .= 0
-	joined[ismissing.(joined[!, "GMM_LOR_raw"]), "GMM_LOR_raw"] .= 0
+	joined[ismissing.(joined.predicted), "predicted"] .= 0
 	joined[!, "predicted"] = disallowmissing(joined.predicted)
+	joined[ismissing.(joined.GMM_LOR), "GMM_LOR"] .= 0
 	joined[!, "GMM_LOR"] = disallowmissing(joined.GMM_LOR)
+	joined[ismissing.(joined.predicted_raw), "predicted_raw"] .= 0
 	joined[!, "predicted_raw"] = disallowmissing(joined.predicted_raw)
-	joined[!, "GMM_LOR_raw"] = disallowmissing(joined.GMM_LOR_raw)
+	if "GMM_LOR_raw" in names(joined)
+		joined[ismissing.(joined.GMM_LOR_raw), "GMM_LOR_raw"] .= 0
+		joined[!, "GMM_LOR_raw"] = disallowmissing(joined.GMM_LOR_raw)
+	end
 	joined
 end
 
@@ -112,11 +114,14 @@ function bin(df, bin_size = BIN_SIZE)
 	combine(groupby(df, ["chr", "strand", "bin"]), columns...)
 end
 
+
 function sharkfin(ax, df, col, lor_col; markersize = 7)
 	mods = df[!, "modified"] .== 1
-	nomods = .! mods
-	scatter!(ax, abs.(df[nomods, lor_col]), df[nomods, col], color="#DDDDDD", alpha = 1, markersize = markersize)
-	scatter!(ax, abs.(df[mods, lor_col]), df[mods, col], color="#2E2585", alpha = 0.8, markersize = markersize)
+	# nomods = .! mods
+	# scatter!(ax, abs.(df[nomods, lor_col]), df[nomods, col], color="#DDDDDD", alpha = 1, markersize = markersize)
+	# scatter!(ax, abs.(df[mods, lor_col]), df[mods, col], color="#2E2585", alpha = 0.8, markersize = markersize)
+	color = ifelse.(mods, "#2E2585", "#DDDDDD")
+	scatter!(ax, abs.(df[:, lor_col]), df[:, col], color=color, alpha = 0.8, markersize = markersize)
 	ax.xlabel = "|LOR|"
 	ax.ylabel = "-log₁₀(q-value)"
 end
