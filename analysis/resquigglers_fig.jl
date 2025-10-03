@@ -70,15 +70,15 @@ uncalled4_remora = innerjoin(binned_uncalled4,
 
 println("Plotting")
 
-resq_fig = Figure(size = (1200, 450))
+resq_fig = Figure(size = (550, 1500))
 
 prc_ax = Axis(resq_fig[1, 1],
               aspect = 1,
               title = "Precision and recall of different resquigglers",
               xlabel = "Recall",
               ylabel = "Precision",
-              height = 320)
-right_grid = resq_fig[1, 2] = GridLayout()
+              height = 460)
+right_grid = resq_fig[2, 1] = GridLayout()
 xlims!(prc_ax, [0, 1])
 ylims!(prc_ax, [0, 1])
 a, p, r = auprc(disallowmissing(binned_eventalign[!, "predicted"]),
@@ -115,6 +115,7 @@ axislegend("Resquiggler", position = :rt, labelsize = 14, framevisible = false, 
 
 sf_ax_ev = Axis(right_grid[1, 1],
                 title = "Eventalign",
+		height=200,
                 aspect = 1)
 xlims!(sf_ax_ev, (0, 5))
 sharkfin(sf_ax_ev,
@@ -123,8 +124,9 @@ sharkfin(sf_ax_ev,
          "GMM_LOR_raw",
          markersize = 4)
 
-sf_ax_u4 = Axis(right_grid[1, 2],
+sf_ax_u4 = Axis(right_grid[2, 1],
                 title = "Uncalled4",
+		height=200,
                 aspect = 1)
 xlims!(sf_ax_u4, (0, 5))
 sharkfin(sf_ax_u4,
@@ -133,8 +135,9 @@ sharkfin(sf_ax_u4,
          "GMM_LOR_raw",
          markersize = 4)
 
-sf_ax_re = Axis(right_grid[1, 3],
+sf_ax_re = Axis(right_grid[3, 1],
                 title = "Remora",
+		height=200,
                 aspect = 1)
 xlims!(sf_ax_re, (0, 5))
 sharkfin(sf_ax_re,
@@ -147,7 +150,7 @@ evu4_cor = round(cor(eventalign_uncalled4.predicted,
                      eventalign_uncalled4.predicted_1);
                  digits = 2)
 println("Eventalign/Uncalled4 correlation r = ", evu4_cor)
-cor_ax_evu4 = Axis(right_grid[2, 1],
+cor_ax_evu4 = Axis(right_grid[1, 2],
                    title = "Eventalign/Uncalled4", # (r=$evu4_cor)",
                    aspect = 1)
 corr_plot(cor_ax_evu4,
@@ -173,7 +176,7 @@ u4re_cor = round(cor(uncalled4_remora.predicted,
                      uncalled4_remora.predicted_1);
                  digits = 2)
 println("Uncalled4/Remora correlation r = ", u4re_cor)
-cor_ax_u4re = Axis(right_grid[2, 3],
+cor_ax_u4re = Axis(right_grid[3, 2],
                    title = "Uncalled4/Remora", #(r=$u4re_cor)",
                    aspect = 1)
 corr_plot(cor_ax_u4re,
@@ -183,15 +186,30 @@ corr_plot(cor_ax_u4re,
           markersize = 4)
 
 linkaxes!(sf_ax_ev, sf_ax_u4, sf_ax_re)
-rowgap!(right_grid, 1.5)
-colgap!(resq_fig.layout, -60)
 
-Legend(resq_fig[2, 2],
+Legend(resq_fig[3, 1],
        [PolyElement(color = COL_GLORI_NEG),
         PolyElement(color = COL_GLORI_POS)],
        ["GLORI-", "GLORI+"],
        orientation = :horizontal,
-       valign = 1)
+       valign = 1,
+       framevisible=false)
+
+# rowgap!(resq_fig.layout, 0)
+rowgap!(resq_fig.layout, 2, -10)
+# colgap!(right_grid, -10)
+
+
+for (label, layout) in zip(["A", "B", "C"],
+			   [resq_fig[1, 1], right_grid[1, 1], right_grid[1, 2]])
+  Label(layout[1, 1, TopLeft()],
+        label,
+        fontsize = 16,
+        font = :bold,
+        padding = (25, 25, 5, 0),
+        halign = :right)
+end
+
 
 println("Saving the figure")
 save("fig_resquigglers.png", resq_fig)

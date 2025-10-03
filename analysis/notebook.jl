@@ -181,6 +181,60 @@ common_binned_1000 = innerjoin(binned_rna002_1000, binned_rna004_1000,
 							   on = [:chr, :strand, :bin],
 							   makeunique = true)
 
+# ╔═╡ 35650746-09b3-4529-ab73-28769d178437
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	local v1_results_part1 = read_results(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
+		"GMM_pvalue",
+		shift = 2,
+		genomic_collapse = false;
+		LOR_threshold = 0)
+	local v1_results_part2 = read_results(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/outnanocompore_results_gx.tsv",
+		"GMM_pvalue",
+		shift = 2,
+		genomic_collapse = false;
+		LOR_threshold = 0)
+
+	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
+	
+	# v1_results = annotate_results(vcat(v1_results_part1, v1_results_part2),
+	# 							  ref002)
+	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
+
+	# Correct for multiple testing
+	local present = v1_results.GMM_pvalue .!== missing
+	local qvals = MultipleTesting.adjust(
+		disallowmissing(v1_results[present, :].GMM_pvalue),
+		MultipleTesting.BenjaminiHochberg())
+	v1_results[!, :GMM_qvalue] = copy(v1_results.GMM_pvalue)
+	v1_results[present, :GMM_qvalue] .= qvals
+
+	lor_corrected_significance = ifelse.(abs.(v1_results[!, :GMM_LOR]) .>= LOR_THRESHOLD, v1_results[!, :GMM_qvalue], 1.0)
+	v1_results[!, :predicted] = -log10.(lor_corrected_significance)
+	
+	v1_results
+end
+  ╠═╡ =#
+
+# ╔═╡ 3ec16ac1-dbec-4ce9-af4d-a913bdc68222
+begin
+	local v1_results_part1 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
+		delim = '\t'))
+
+	local v1_results_part2 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/out_nanocompore_results_manual_db_export2.tsv",
+		delim = '\t'))
+
+	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
+	
+	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
+	
+end
+
 # ╔═╡ cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
 # rna002_tx = read_results(
 # 		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0/out_nanocompore_results.tsv",
@@ -202,14 +256,11 @@ begin
 end
 
 # ╔═╡ a50423b1-d847-4429-9bb9-9d8a7523a459
-#=╠═╡
 v1_v2_common = innerjoin(v1_results, rna002_tx,
 		  				 on = [:ref_id, :pos],
 		  				 renamecols = "_v1" => "_v2")
-  ╠═╡ =#
 
 # ╔═╡ 884239d8-5613-44bc-a14c-348b3e31d3c3
-#=╠═╡
 begin
 	local common = copy(v1_v2_common[v1_v2_common.GMM_pvalue_v1 .!== missing .&& v1_v2_common.GMM_chi2_pvalue_v2 .!== missing, :])
 	local pvals1 = -log10.(clamp.(common.GMM_pvalue_v1, 1e-300, 1))
@@ -232,10 +283,8 @@ begin
 				    ylabel = "v2: -log₁₀(𝑃-value)"))
 	# data(DataFrame(v1 = pvals1, v2 = pvals2)) * mapping(:v1 => "v1: -log₁₀(𝑃-value)", :v2 => "v2: -log₁₀(𝑃-value)") * visual(Scatter, markersize = 5) |> draw
 end
-  ╠═╡ =#
 
 # ╔═╡ 866b5d33-c2a7-4400-845e-50575053be71
-#=╠═╡
 begin
 	local common = copy(v1_v2_common)
 	common[:, :bin] = map(pos -> div(pos, BIN_SIZE), common.genomicPos_v2)
@@ -272,10 +321,8 @@ begin
 	binned_v1_v2_common[:, :predicted_v2] = -log10.(binned_v1_v2_common.GMM_qvalue_v2)
 	binned_v1_v2_common
 end
-  ╠═╡ =#
 
 # ╔═╡ 9193fd14-d45c-4534-a029-75ab8171ea40
-#=╠═╡
 begin
 	local rocs1 = roc(binned_v1_v2_common.modified,
 			     binned_v1_v2_common.predicted_v1, nrow(binned_v1_v2_common))
@@ -311,10 +358,8 @@ begin
 		data(DataFrame(precision = [p001_v1, p001_v2], recall = [r001_v1, r001_v2], version = ["v1", "v2"])) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Scatter)
 	) |> draw(scales(Color = (; palette = [:black, COL_RNA002])); axis = (; aspect = 1))
 end
-  ╠═╡ =#
 
 # ╔═╡ 7a74c048-770c-4782-9c19-ab800f66b7e1
-#=╠═╡
 begin
 	local f = Figure()
 	local ax = Axis(f[1, 1],
@@ -349,15 +394,12 @@ begin
 	
 	f
 end
-  ╠═╡ =#
 
 # ╔═╡ 96a61659-2925-44ce-ae5a-a2e0c6f7b0f4
-#=╠═╡
 binned_v1_results = annotate_binned_results(
 	bin(innerjoin(v1_results, v1_v2_common[:, [:ref_id, :pos]],
 				  on = [:ref_id, :pos]), BIN_SIZE),
 	binned_glori)
-  ╠═╡ =#
 
 # ╔═╡ 9054c2f0-7050-4bb9-bd10-da57ec7fa69c
 
@@ -414,15 +456,12 @@ binned_v2_matched = annotate_binned_results(
 	binned_glori)
 
 # ╔═╡ 0e079cb8-3014-4149-ab6d-38f4ed3c256d
-#=╠═╡
 v1_v2_matched = innerjoin(binned_v1_results, binned_v2_matched,
 						  on = [:chr, :strand, :bin],
 						  makeunique = true,
 						  renamecols = :_v1 => :_v2)
-  ╠═╡ =#
 
 # ╔═╡ 0697fd84-432e-401b-97c3-dc56b0cccbff
-#=╠═╡
 begin
 	local f = Figure()
 	local ax = Axis(f[1, 1],
@@ -456,10 +495,8 @@ begin
 	
 	f
 end
-  ╠═╡ =#
 
 # ╔═╡ e48d049b-4297-4c1e-9162-85f947d1dc20
-#=╠═╡
 begin
 	local f = Figure()
 	local ax = Axis(f[1, 1],
@@ -492,23 +529,16 @@ begin
 	f
 	# df
 end
-  ╠═╡ =#
 
 # ╔═╡ 91c41c2e-5ae1-4cb2-86b9-d4fb953570d1
-#=╠═╡
 leftjoin(v1_v2_common, glori,
 		 on = [:chr_v1 => :chrom, :strand_v1 => :strand, :genomicPos_v1 => :pos])
-  ╠═╡ =#
 
 # ╔═╡ 2f1d642b-d646-416d-9550-bbe30f2044a1
-#=╠═╡
 scatter(v1_v2_matched.predicted_v1, v1_v2_matched.predicted_v2, markersize = 5)
-  ╠═╡ =#
 
 # ╔═╡ 53df2546-878c-4027-bb5b-6f8a4af5bb5f
-#=╠═╡
 cor(v1_v2_matched.predicted_v1, v1_v2_matched.predicted_v2)
-  ╠═╡ =#
 
 # ╔═╡ b94447fc-762a-43b8-9e0c-987064a62618
 begin
@@ -529,7 +559,6 @@ begin
 end
 
 # ╔═╡ 31b0f531-c921-46b2-aada-87098aa16d97
-#=╠═╡
 begin
 	f = Figure(size = (1400, 800))
 
@@ -1049,7 +1078,6 @@ begin
 	hidespines!(ax_venn)
 	f
 end
-  ╠═╡ =#
 
 # ╔═╡ af54cf26-5304-4250-a21c-61b08871defa
 begin
@@ -1218,62 +1246,6 @@ end
 # ╔═╡ e25b7e46-9ea3-4210-a661-b55e69b8fc2c
 # rna004[rna004.bin .== 102743, :]
 rna004[rna004.bin .== 137185, :]
-
-# ╔═╡ 35650746-09b3-4529-ab73-28769d178437
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	local v1_results_part1 = read_results(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
-		"GMM_pvalue",
-		shift = 2,
-		genomic_collapse = false;
-		LOR_threshold = 0)
-	local v1_results_part2 = read_results(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/outnanocompore_results_gx.tsv",
-		"GMM_pvalue",
-		shift = 2,
-		genomic_collapse = false;
-		LOR_threshold = 0)
-
-	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
-	
-	# v1_results = annotate_results(vcat(v1_results_part1, v1_results_part2),
-	# 							  ref002)
-	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
-
-	# Correct for multiple testing
-	local present = v1_results.GMM_pvalue .!== missing
-	local qvals = MultipleTesting.adjust(
-		disallowmissing(v1_results[present, :].GMM_pvalue),
-		MultipleTesting.BenjaminiHochberg())
-	v1_results[!, :GMM_qvalue] = copy(v1_results.GMM_pvalue)
-	v1_results[present, :GMM_qvalue] .= qvals
-
-	lor_corrected_significance = ifelse.(abs.(v1_results[!, :GMM_LOR]) .>= LOR_THRESHOLD, v1_results[!, :GMM_qvalue], 1.0)
-	v1_results[!, :predicted] = -log10.(lor_corrected_significance)
-	
-	v1_results
-end
-  ╠═╡ =#
-
-# ╔═╡ 3ec16ac1-dbec-4ce9-af4d-a913bdc68222
-#=╠═╡
-begin
-	local v1_results_part1 = DataFrame(CSV.File(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1/partial_first_run_results_with_KS_gx.tsv",
-		delim = '\t'))
-
-	local v1_results_part2 = DataFrame(CSV.File(
-		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/out_nanocompore_results_manual_db_export2.tsv",
-		delim = '\t'))
-
-	local cols = [x for x in intersect(Set(names(v1_results_part1)), Set(names(v1_results_part2)))]
-	
-	v1_results = vcat(v1_results_part1[:, cols], v1_results_part2[:, cols])
-	
-end
-  ╠═╡ =#
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """

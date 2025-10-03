@@ -45,7 +45,8 @@ function read_results(filepath, col; shift = 0, genomic_collapse = true, LOR_thr
   # df = df[.! ismissing.(df[!, col]), :]
   df[:, col] = coalesce.(df[:, col], 1)
 
-  df[df[!, col] .== 0, col] .= eps(Float64)
+  # df[df[!, col] .== 0, col] .= eps(Float64)
+  df[df[!, col] .== 0, col] .= 1e-300
   df[ismissing.(df[!, "GMM_LOR"]), "GMM_LOR"] .= 0
   df[!, "predicted_raw"] = -log10.(df[!, col])
   lor_corrected_significance = ifelse.(abs.(df[!, "GMM_LOR"]) .>= LOR_threshold, df[!, col], 1.0)

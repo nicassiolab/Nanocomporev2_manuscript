@@ -43,6 +43,18 @@ using ConfSets
 # ╔═╡ 034a73ca-3f8e-11f0-0aea-77f9aa7561f4
 include("lib.jl")
 
+# ╔═╡ 6e0b2772-54ac-4bba-8a26-647c7b32f520
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/high_confidence_GLORI_sites.bed"))
+	glori[!, "pos"] = glori.start .+ 2
+	glori[!, "bin"] = map(p -> div(p, BIN_SIZE), glori.pos)
+	glori[!, "modified"] .= 1
+	glori
+end
+  ╠═╡ =#
+
 # ╔═╡ c0ccdc56-02cf-46b3-b721-dca81ab3f8e6
 # ╠═╡ disabled = true
 #=╠═╡
@@ -1040,34 +1052,37 @@ function annotate_peaks(peaks, glori)
 	annot_peaks
 end
 
+# ╔═╡ c6877e60-d3ff-4122-bbc7-d83da7173fce
+begin
+	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/GLORI_intersection_176k.bed"))
+	# glori[!, "pos"] = glori.start .+ 2
+	glori[:, :pos] = glori.start
+	glori[!, "bin"] = map(p -> div(p, BIN_SIZE), glori.pos)
+	glori[!, "modified"] .= 1
+	rename!(glori, :chrom => :chr)
+	glori
+end
+
 # ╔═╡ 5ae2462c-a387-45cc-af66-3a474952d251
-#=╠═╡
 rna002_annot_peaks = annotate_peaks(rna002_peaks, glori[:, [:chr, :strand, :pos, :modified]])
-  ╠═╡ =#
 
 # ╔═╡ 5733debc-825e-49a1-8a1b-3c286f71c935
-#=╠═╡
 rna002_p10_annot_peaks = annotate_peaks(rna002_p10_peaks, glori[:, [:chr, :strand, :pos, :modified]])
-  ╠═╡ =#
 
 # ╔═╡ 0ab9322b-175a-49c6-973a-369f6bb975e7
 rna004_peaks = peaks(rna004_tx, 4)
 
 # ╔═╡ 26ae5e1b-29ed-4a13-8a51-a7bf4337a9f1
-#=╠═╡
 rna004_annot_peaks = annotate_peaks(rna004_peaks, glori[:, [:chr, :strand, :pos, :modified]])
-  ╠═╡ =#
 
 # ╔═╡ fb4a5c1b-4a4c-41f1-9ed6-69bf589684b3
 rna004_p12_peaks = peaks(rna004_p12_tx, 4)
 
 # ╔═╡ 823797fe-09a0-4de2-b3fa-1bf310a77ab1
-#=╠═╡
 rna004_p12_annot_peaks = annotate_peaks(rna004_p12_peaks, glori[:, [:chr, :strand, :pos, :modified]])
-  ╠═╡ =#
 
 # ╔═╡ bb89baaf-d5cf-4e35-982a-83d7cab2e87e
-function plot_peak_dist_hist!(fig, gridpos, res, reference, peaks, motor_peaks; title = "", radius = 15, col_palette = [:black, :red], style_palette = [:solid, :dash], titlesize = 28, linewidth = 2)
+function plot_peak_dist_hist!(fig, gridpos, res, reference, peaks, motor_peaks; title = "", radius = 15, col_palette = [:black, :red], style_palette = [:solid, :dash], titlesize = 28, linewidth = 2, maxy=nothing)
 	local ref = innerjoin(reference, res[:, [:chr, :strand, :genomicPos]],
 						  on = [:chr, :strand, :genomicPos])
 	local mods = unique(ref[ref.modified .== 1, :])
@@ -1093,14 +1108,14 @@ function plot_peak_dist_hist!(fig, gridpos, res, reference, peaks, motor_peaks; 
 	distances2d = distances2d[abs.(distances2d) .<= radius]
 	distances3d = distances3d[abs.(distances3d) .<= radius]
 
-	local distances = vcat(DataFrame(distance = distances2d, type = L"\text{2D}"),
-						   DataFrame(distance = distances3d, type = L"\text{3D}"))
+	local distances = vcat(DataFrame(distance = distances2d, type = "2D"),
+						   DataFrame(distance = distances3d, type = "3D"))
 
 	
 	plt = data(distances) *
 		  mapping(:distance => "Distance",
-				  color = :type => L"\textbf{GMM test}",
-				  linestyle = :type => L"\textbf{GMM test}") * 
+				  color = :type => "GMM test",
+				  linestyle = :type => "GMM test") * 
 		  AlgebraOfGraphics.histogram(Stairs;
 									  normalization = :pdf,
 									  bins = -radius:(radius+1)) *
@@ -1115,10 +1130,12 @@ function plot_peak_dist_hist!(fig, gridpos, res, reference, peaks, motor_peaks; 
 					scales(Color = (; palette = col_palette),
 						   LineStyle = (; palette = style_palette));
 					axis = (; title = title,
+							  aspect=1,
 							  titlesize = titlesize,
 							  xticks = ((-radius + 0.5):(radius+0.5),
 										[string(t) for t in -radius:radius]),
-				   			  ylabel = "PDF"))
+				   			  ylabel = "PDF",
+						      limits=(nothing, (0, maxy))))
 	
 	legend!(gridpos, f;
 			tellwidth = false,
@@ -1205,7 +1222,7 @@ function plot_prc!(ax, gt, pred, thres; label = "", color = :black, linestyle = 
 	push!(precisions, 0)
 	push!(recalls, 1)
 	area = auc(recalls, precisions)
-	lines!(ax, recalls, precisions, color = color, linestyle = linestyle, label = L"\text{%$(label) (AUC=%$(round(area; digits = 2)))}", linewidth = linewidth)
+	lines!(ax, recalls, precisions, color = color, linestyle = linestyle, label = "$label (AUC=$(round(area; digits = 2)))", linewidth = linewidth)
 
 	local evaluation = roc(gt, pred .> dot_thres)
 	local p001 = precision(evaluation)
@@ -1332,6 +1349,82 @@ begin
 
 	axislegend(ax, L"\textbf{GMM test}")
 	
+	f
+end
+
+# ╔═╡ a82dddab-3df0-4c56-b3a2-944058a7228a
+begin
+	local peakannot_002_binned = copy(peakannot_002)
+	peakannot_002_binned[!, :bin] = div.(peakannot_002.genomicPos, BIN_SIZE)
+	peakannot_002_binned = combine(groupby(peakannot_002_binned, [:chr, :strand, :bin]),
+								   :modified => maximum => :modified,
+								   :predicted => maximum =>  :predicted)
+	local peakannot_002_p10_binned = copy(peakannot_002_p10)
+	peakannot_002_p10_binned[!, :bin] = div.(peakannot_002_p10.genomicPos, BIN_SIZE)
+	peakannot_002_p10_binned = combine(groupby(peakannot_002_p10_binned, [:chr, :strand, :bin]),
+								   :modified => maximum => :modified,
+								   :predicted => maximum =>  :predicted)
+	
+	local f = Figure(size=(900, 450))
+	local ax = Axis(f[1, 1],
+				    title = "RNA002",
+				    aspect = 1)
+	plot_prc!(ax,
+			 peakannot_002_binned.modified,
+		 	 peakannot_002_binned.predicted,
+		 	 sort(filter(v -> v > 0, peakannot_002_binned.predicted));
+			 linestyle = :solid,
+			 label = "Default")
+	plot_prc!(ax,
+			 peakannot_002_p10_binned.modified,
+		 	 peakannot_002_p10_binned.predicted,
+		 	 sort(filter(v -> v > 0, peakannot_002_p10_binned.predicted));
+			 label = "Motor",
+			 linestyle = :dash,
+			 color = :red)
+
+	axislegend(ax, "GMM test")
+	
+	local peakannot_004_binned = copy(peakannot_004)
+	peakannot_004_binned[!, :bin] = div.(peakannot_004.genomicPos, BIN_SIZE)
+	peakannot_004_binned = combine(groupby(peakannot_004_binned, [:chr, :strand, :bin]),
+								   :modified => maximum => :modified,
+								   :predicted => maximum =>  :predicted)
+	local peakannot_004_p12_binned = copy(peakannot_004_p12)
+	peakannot_004_p12_binned[!, :bin] = div.(peakannot_004_p12.genomicPos, BIN_SIZE)
+	peakannot_004_p12_binned = combine(groupby(peakannot_004_p12_binned, [:chr, :strand, :bin]),
+								   :modified => maximum => :modified,
+								   :predicted => maximum =>  :predicted)
+	
+	local ax2 = Axis(f[1, 2],
+				     title = "RNA004",
+				     aspect = 1)
+	plot_prc!(ax2,
+			 peakannot_004_binned.modified,
+		 	 peakannot_004_binned.predicted,
+		 	 sort(filter(v -> v > 0, peakannot_004_binned.predicted));
+			 linestyle = :solid,
+			 label = "Default")
+	plot_prc!(ax2,
+			 peakannot_004_p12_binned.modified,
+		 	 peakannot_004_p12_binned.predicted,
+		 	 sort(filter(v -> v > 0, peakannot_004_p12_binned.predicted));
+			 label = "Motor",
+			 linestyle = :dash,
+			 color = :red)
+
+	axislegend(ax2, "GMM test")
+
+	for (label, layout) in zip(["A", "B"],
+							   [f[1, 1], f[1, 2]])
+	    Label(layout[1, 1, TopLeft()], label,
+	        fontsize = 16,
+	        font = :bold,
+	        padding = (0, 5, 5, 0),
+	        halign = :right)
+	end
+	
+
 	f
 end
 
@@ -1648,9 +1741,6 @@ Makie.to_font("Blackchancery")
 # ╔═╡ 3eb319a8-f26a-4508-a749-2d539c021600
 L"\textbf{KS(intensity) and KS(dwell) correlation}"
 
-# ╔═╡ 663da336-bd67-4d02-9b21-4330c4b08c96
-
-
 # ╔═╡ 1069343c-a14b-42ae-bb1d-a2c5ae2d06c5
 L"\textbf{RNA002: KS}_{\large{intensity}}-\textbf{KS}_{dwell}\textbf{ correlation}" 
 
@@ -1661,29 +1751,44 @@ begin
 	local COL_2D = "#004488"  # "#3E8241" # "#17becf"
 	local COL_3D = "#D75F00" # "#6948A3" # "#bcbd22"
 	
-	local f = Figure(size = (2244, 1182),
+	local f = Figure(size = (1150, 1800),
 					 # fonts = (; regular = "fonts/cmunorm.ttf", bold = "fonts/cmunso.ttf"),
 					 fontsize = 26)
 	# local f = Figure(size = (9cm, 7cm), fontsize = 12pt)
 	# local ga = f[1, 1] = GridLayout()
 	# local gb = f[1, 2] = GridLayout()
 
-	local cor_maxy = 0.185
+	local cor_maxy = 0.21
 	local markersize = 9
 
 	local ax = Axis(f[1, 1],
-					title = L"\textbf{RNA002: KS}_{intensity}-\textbf{KS}_{dwell}\textbf{ correlation}",
-					titlesize= 28,
+				    title="RNA002",
+				    titlesize=34)
+	hidedecorations!(ax)
+	hidespines!(ax)
+	local ax = Axis(f[1, 2],
+				    title="RNA004",
+				    titlesize=34)
+	hidedecorations!(ax)
+	hidespines!(ax)
+
+
+	local ax = Axis(f[2, 1],
+					# title = L"\textbf{KS}_{intensity}-\textbf{KS}_{dwell}\textbf{ correlation}",
+					titlesize=20,
+					aspect=1,
 				    xlabel = "Offset",
 				    ylabel = "Correlation",
 				    yticks = 0:0.02:cor_maxy)
 	ylims!(ax, (-0.01, cor_maxy))
-	
-	scatter!(ax, mean_xcorrs_002.offset, mean_xcorrs_002.mean_xcorr, markersize = markersize, color = COL_ALL_SITES, label = L"\text{All sites}")
-	lines!(ax, mean_xcorrs_002.offset, mean_xcorrs_002.mean_xcorr, color = COL_ALL_SITES, linewidth = 2.5)
 
-	scatter!(ax, -25:25, rna002_cors_sig, markersize = markersize, color = COL_MOD_SITES, label = L"\text{Modified sites}")
-	lines!(ax, -25:25, rna002_cors_sig, color = COL_MOD_SITES, linestyle = :dash, linewidth = 2.5)
+	local mean_xcorrs_002_ = mean_xcorrs_002[abs.(mean_xcorrs_002.offset) .< 21, :]
+	local rna002_cors_sig_ = rna002_cors_sig[6:46]
+	scatter!(ax, mean_xcorrs_002_.offset, mean_xcorrs_002_.mean_xcorr, markersize = markersize, color = COL_ALL_SITES, label = "All sites")
+	lines!(ax, mean_xcorrs_002_.offset, mean_xcorrs_002_.mean_xcorr, color = COL_ALL_SITES, linewidth = 2.5)
+
+	scatter!(ax, -20:20, rna002_cors_sig_, markersize = markersize, color = COL_MOD_SITES, label = "Modified sites")
+	lines!(ax, -20:20, rna002_cors_sig_, color = COL_MOD_SITES, linestyle = :dash, linewidth = 2.5)
 
 	# axislegend(ax)
 	local legend_elem_all = [LineElement(color = COL_ALL_SITES, linestyle = :solid),
@@ -1692,45 +1797,48 @@ begin
 	local legend_elem_mod = [LineElement(color = COL_MOD_SITES, linestyle = :dash),
           					 MarkerElement(color = COL_MOD_SITES, marker = :circle, 								 markersize = 15,
          				     strokecolor = COL_MOD_SITES)]
-	Legend(f[1, 1],
+	Legend(f[2, 1],
 		   [legend_elem_all, legend_elem_mod],
-		   [L"\text{All sites}", L"\text{Modified sites}"],
+		   ["All sites", "Modified sites"],
 		   patchsize = (40, 40),
-		   rowgap = 10,
+		   rowgap = 5,
 		   tellwidth = false,
 		   halign = :right,
 		   valign = :top,
 		   margin = (10, 10, 10, 10))
 	
-	local ax = Axis(f[2, 1],
-					title = L"\textbf{RNA004: KS}_{intensity}-\textbf{KS}_{dwell}\textbf{ correlation}",
-					titlesize= 28,
+	local ax = Axis(f[2, 2],
+					# title = L"\textbf{KS}_{intensity}-\textbf{KS}_{dwell}\textbf{ correlation}",
+					titlesize=20,
+					aspect=1,
 				    xlabel = "Offset",
 				    ylabel = "Correlation",
 				    yticks = 0:0.02:cor_maxy)
 	ylims!(ax, (-0.01, cor_maxy))
 	
-	scatter!(ax, mean_xcorrs.offset, mean_xcorrs.mean_xcorr, markersize = markersize, color = COL_ALL_SITES, label = L"\text{All sites}")
-	lines!(ax, mean_xcorrs.offset, mean_xcorrs.mean_xcorr, color = COL_ALL_SITES, linewidth = 2.5)
+	local mean_xcorrs_ = mean_xcorrs[abs.(mean_xcorrs.offset) .< 21, :]
+	local rna004_cors_sig_ = rna004_cors_sig[6:46]
+	scatter!(ax, mean_xcorrs_.offset, mean_xcorrs_.mean_xcorr, markersize = markersize, color = COL_ALL_SITES, label = "All sites")
+	lines!(ax, mean_xcorrs_.offset, mean_xcorrs_.mean_xcorr, color = COL_ALL_SITES, linewidth = 2.5)
 	
-	scatter!(ax, -25:25, rna004_cors_sig, markersize = markersize, color = COL_MOD_SITES, label = L"\text{Modified sites}")
-	lines!(ax, -25:25, rna004_cors_sig, color = COL_MOD_SITES, linestyle = :dash, linewidth = 2.5)
+	scatter!(ax, -20:20, rna004_cors_sig_, markersize = markersize, color = COL_MOD_SITES, label = "Modified sites")
+	lines!(ax, -20:20, rna004_cors_sig_, color = COL_MOD_SITES, linestyle = :dash, linewidth = 2.5)
 
 	# axislegend(ax)
-	Legend(f[2, 1],
+	Legend(f[2, 2],
 		   [legend_elem_all, legend_elem_mod],
-		   [L"\text{All sites}", L"\text{Modified sites}"],
+		   ["All sites", "Modified sites"],
 		   patchsize = (40, 40),
-		   rowgap = 10,
+		   rowgap = 5,
 		   tellwidth = false,
 		   halign = :right,
 		   valign = :top,
 		   margin = (10, 10, 10, 10))
 	
 	
-	local ax = Axis(f[1, 2],
-				    title = L"\textbf{RNA002: single base resolution}",
-					titlesize= 28,
+	local ax = Axis(f[3, 1],
+				    # title = L"\textbf{Single base resolution}",
+					titlesize=20,
 				    aspect = 1,
 		        	xlabel = "Recall",
 		        	ylabel = "Precision")
@@ -1751,11 +1859,11 @@ begin
 			  linewidth = 2.5,
 			  color = COL_3D)
 
-	axislegend(ax, L"\textbf{GMM test}", patchsize = (40, 40))
+	axislegend(ax, "GMM test", patchsize = (40, 40))
 
-	local ax = Axis(f[2, 2],
-				    title = L"\textbf{RNA004: single base resolution}",
-					titlesize= 28,
+	local ax = Axis(f[3, 2],
+				    # title = L"\textbf{Single base resolution}",
+					titlesize=20,
 				    aspect = 1,
 		        	xlabel = "Recall",
 		        	ylabel = "Precision")
@@ -1776,22 +1884,25 @@ begin
 			  linewidth = 2.5,
 			  color = COL_3D)
 
-	axislegend(ax, L"\textbf{GMM test}", patchsize = (40, 40))
+	axislegend(ax, "GMM test", patchsize = (40, 40))
 
-	plot_peak_dist_hist!(f, f[1, 3], rna002_tx, ref002, peakannot_002, peakannot_002_p10; title = L"\textbf{RNA002: closest peak distance}", radius = 7, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5)
-	plot_peak_dist_hist!(f, f[2, 3], rna004_tx, ref004, peakannot_004, peakannot_004_p12; title = L"\textbf{RNA004: closest peak distance}", radius = 7, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5)
+	# plot_peak_dist_hist!(f, f[4, 1], rna002_tx, ref002, peakannot_002, peakannot_002_p10; title = L"\textbf{Closest peak distance}", radius = 5, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5, maxy=0.85)
+	# plot_peak_dist_hist!(f, f[4, 2], rna004_tx, ref004, peakannot_004, peakannot_004_p12; title = L"\textbf{Closest peak distance}", radius = 5, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5, maxy=0.85)
+	plot_peak_dist_hist!(f, f[4, 1], rna002_tx, ref002, peakannot_002, peakannot_002_p10; radius = 5, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5, maxy=0.85)
+	plot_peak_dist_hist!(f, f[4, 2], rna004_tx, ref004, peakannot_004, peakannot_004_p12; radius = 5, col_palette = [COL_2D, COL_3D], titlesize = 28, linewidth = 2.5, maxy=0.85)
 
-	colsize!(f.layout, 1, Relative(0.4))
-	colsize!(f.layout, 2, Relative(0.25))
-	colsize!(f.layout, 3, Relative(0.35))
+	# colsize!(f.layout, 1, Relative(0.4))
+	# colsize!(f.layout, 2, Relative(0.25))
+	# colsize!(f.layout, 3, Relative(0.35))
 	# colsize!(f.layout, 4, Fixed(450))
+	rowsize!(f.layout, 1, Fixed(20))
 
 	for (label, layout) in zip(["A", "B", "C", "D", "E", "F"],
-							   [f[1, 1], f[2, 1], f[1, 2], f[2, 2], f[1, 3], f[2, 3]])
+							   [f[2, 1], f[2, 2], f[3, 1], f[3, 2], f[4, 1], f[4, 2]])
 	    Label(layout[1, 1, TopLeft()], label,
 	        fontsize = 26,
 	        font = :bold,
-	        padding = (0, 5, 5, 0),
+	        padding = (50, 30, 5, 0),
 	        halign = :right)
 	end
 
@@ -2209,6 +2320,8 @@ begin
 end
 
 # ╔═╡ 6d9fb141-e38a-4fe2-822f-58053304ded5
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local df = innerjoin(rna002_tx, rna002_p10_tx,
 			  			 on = [:ref_id, :pos],
@@ -2223,8 +2336,11 @@ begin
 	df = df[df.GMM_chi2_pvalue .!= 1 .|| df.GMM_chi2_pvalue .!= 1, :]
 	data(df) * mapping(:log10_pval_2d, :log10_pval_3d, color = :modified) * visual(Scatter, markersize = 5) |> draw
 end
+  ╠═╡ =#
 
 # ╔═╡ a247b841-ecbc-4bee-a1c8-ec86099ac9dd
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local df = innerjoin(rna002_tx, rna002_p10_tx,
 			  			 on = [:ref_id, :pos],
@@ -2240,8 +2356,11 @@ begin
 	df[!, :modified] = df.modified .== 1
 	data(df) * mapping(:log10_pval_2d, :log10_pval_3d, color = :modified) * linear() |> draw
 end
+  ╠═╡ =#
 
 # ╔═╡ 8efc4f06-d436-45b1-955c-914bf599eb3c
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local df = innerjoin(rna002_tx, rna002_p10_tx,
 			  			 on = [:ref_id, :pos],
@@ -2257,8 +2376,11 @@ begin
 	df[!, :modified] = df.modified .== 1
 	data(df) * mapping(:log10_pval_2d, :log10_pval_3d, color = :modified) * smooth(npoints = 2000) |> draw
 end
+  ╠═╡ =#
 
 # ╔═╡ f2dbafe4-b755-4c8c-a2dc-d19272b93c86
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local df = innerjoin(rna002_tx, rna002_p10_tx,
 			  			 on = [:ref_id, :pos],
@@ -2284,8 +2406,11 @@ begin
 	
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ 3de9eae6-3865-48e6-8d8e-027c54024b02
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local df = innerjoin(rna004_tx, rna004_p12_tx,
 			  			 on = [:ref_id, :pos],
@@ -2311,8 +2436,11 @@ begin
 	
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ 10a23508-008e-40a5-843b-bd4a1ae849c8
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local radius = 15
 	local ref = innerjoin(ref002, rna002_tx[:, [:chr, :strand, :genomicPos]],
@@ -2353,8 +2481,11 @@ begin
 	# df2d[!, :predicted] .= 0
 	# df2d
 end
+  ╠═╡ =#
 
 # ╔═╡ f66b0014-35b4-4d3c-bed0-5eded1c27d47
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local radius = 15
 	local ref = innerjoin(ref002, rna002_tx[:, [:chr, :strand, :genomicPos]],
@@ -2399,11 +2530,14 @@ begin
 	
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ ea7a956e-fc58-4c06-9e32-a3921220bd6a
 Makie.to_font("fonts/cmunorm.ttf")
 
 # ╔═╡ 17972770-7786-464e-8bd8-709852c548d9
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local radius = 15
 	local ref = innerjoin(ref004, rna004_tx[:, [:chr, :strand, :genomicPos]],
@@ -2445,37 +2579,13 @@ begin
 	
 	fig
 end
+  ╠═╡ =#
 
 # ╔═╡ 173461ca-2322-4677-9d3a-8d49dbd8aa4e
 findmin(abs, [-1, 5, -10])
 
 # ╔═╡ bf32966d-3022-40ab-b1c8-1b874ac9095e
 sort(rna002_tx.GMM_chi2_pvalue)
-
-# ╔═╡ c6877e60-d3ff-4122-bbc7-d83da7173fce
-#=╠═╡
-begin
-	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/GLORI_intersection_176k.bed"))
-	# glori[!, "pos"] = glori.start .+ 2
-	glori[:, :pos] = glori.start
-	glori[!, "bin"] = map(p -> div(p, BIN_SIZE), glori.pos)
-	glori[!, "modified"] .= 1
-	rename!(glori, :chrom => :chr)
-	glori
-end
-  ╠═╡ =#
-
-# ╔═╡ 6e0b2772-54ac-4bba-8a26-647c7b32f520
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-	glori = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/high_confidence_GLORI_sites.bed"))
-	glori[!, "pos"] = glori.start .+ 2
-	glori[!, "bin"] = map(p -> div(p, BIN_SIZE), glori.pos)
-	glori[!, "modified"] .= 1
-	glori
-end
-  ╠═╡ =#
 
 # ╔═╡ Cell order:
 # ╠═034a73ca-3f8e-11f0-0aea-77f9aa7561f4
@@ -2566,6 +2676,7 @@ end
 # ╠═696b8bee-81d7-47d2-8e55-08f490341195
 # ╠═9c838f8e-fe3a-4ee1-923b-146a165ff16f
 # ╠═d0bd49e7-0e0e-44c0-a7cb-919f9c47ad6e
+# ╠═a82dddab-3df0-4c56-b3a2-944058a7228a
 # ╠═7016d0c0-3720-4b50-a01e-6ae04cb013f3
 # ╠═2f86ca19-0c1b-44e4-92cb-4b269f3fa12b
 # ╠═fe258560-13ce-45f8-96a9-431081463201
@@ -2597,7 +2708,6 @@ end
 # ╠═4ab1f43e-bc3f-4865-8638-f53426ebdb7f
 # ╠═99c5d277-0490-44bf-83a4-85e34d8daec6
 # ╠═3eb319a8-f26a-4508-a749-2d539c021600
-# ╠═663da336-bd67-4d02-9b21-4330c4b08c96
 # ╠═1069343c-a14b-42ae-bb1d-a2c5ae2d06c5
 # ╠═64ed1f82-51f0-448f-8e54-a8565898774c
 # ╠═a5d05c3c-6dfd-414e-be41-5d032ece5561

@@ -142,6 +142,38 @@ esrra_1489 = get_pos_data(esrra_data, 1489)
 data(esrra_1489[esrra_1489.condition .!= "IVT", :]) * mapping(:dwell => "log10(dwell)", :intensity, color = :condition) * (AlgebraOfGraphics.density() * visual(Contour) + visual(Scatter, markersize = 2.5)) |> draw(scales(Color = (; palette = [:green, :orange, :purple]));
 																																												   axis = (; title = "ESRRA-202, position 1489"))
 
+# ╔═╡ 29cd6526-b299-494b-a25a-1c9351af3566
+tuba1b201_data = get_transcript_signals(dbs, "ENST00000332858.10|ENSG00000123416.15|OTTHUMG00000170410.2|OTTHUMT00000409006.1|TUBA1B-201|TUBA1B|3198|retained_intron|")
+
+# ╔═╡ a70a7c3c-c8e8-44a0-95e6-cf9728165fdb
+data(get_pos_data(tuba1b201_data[.! occursin.("STORM", String.(tuba1b201_data.sample)), :], 3155)) * mapping(:dwell => "log10(dwell)", :intensity, color = :condition) * (AlgebraOfGraphics.density() * visual(Contour) + visual(Scatter, markersize = 2.5, alpha=0.2)) |> draw(scales(Color = (; palette = [:green, :purple]));
+																																												   axis = (; title = "TUBA1B-201, position 3155 (Y)", limits = ((-3, 0.5), (80, 110))))
+
+# ╔═╡ 099f9092-7b09-4628-bb93-36a496a6af72
+data(get_pos_data(tuba1b201_data[.! occursin.("STORM", String.(tuba1b201_data.sample)), :], 3172)) * mapping(:dwell => "log10(dwell)", :intensity, color = :condition) * (AlgebraOfGraphics.density() * visual(Contour) + visual(Scatter, markersize = 2.5, alpha=0.35)) |> draw(scales(Color = (; palette = [:green, :purple]));
+																																												   axis = (; title = "TUBA1B-201, position 3172 (m5C)", limits = ((-3, 0), (55, 85))))
+
+# ╔═╡ 1dff1fbf-b192-46cb-baaa-e41bb914ee35
+tuba1b202_data = get_transcript_signals(dbs, "ENST00000336023.9|ENSG00000123416.15|OTTHUMG00000170410.2|OTTHUMT00000409005.1|TUBA1B-202|TUBA1B|1627|protein_coding|")
+
+# ╔═╡ 069d3515-5272-45c3-82a1-f2dba73d9f5b
+data(get_pos_data(tuba1b202_data[.! occursin.("STORM", String.(tuba1b202_data.sample)), :], 1580)) * mapping(:dwell => "log10(dwell)", :intensity, color = :condition) * (AlgebraOfGraphics.density() * visual(Contour) + visual(Scatter, markersize = 2.5, alpha=0.2)) |> draw(scales(Color = (; palette = [:green, :purple]));
+																																												   axis = (; title = "TUBA1B-202, position 1580 (Y)", limits = ((-3, 0.5), (80, 110))))
+
+# ╔═╡ cbabb4a9-0797-4c97-9a5d-fa669b90284e
+data(get_pos_data(tuba1b202_data[.! occursin.("STORM", String.(tuba1b202_data.sample)), :], 1592)) * mapping(:dwell => "log10(dwell)", :intensity, color = :condition) * (AlgebraOfGraphics.density() * visual(Contour) + visual(Scatter, markersize=2.5, alpha=0.35)) |> draw(scales(Color = (; palette = [:green, :purple]));
+																																												   axis = (; title = "TUBA1B-202, position 1592 (m5C)", limits = ((-3, 0), (55, 85))))
+
+# ╔═╡ 0557e28f-1164-4ce0-bdfc-b203cf1b43ae
+(
+	data(get_pos_data(tuba1b202_data[occursin.("WT", String.(tuba1b202_data.sample)), :], 1592)) *
+		mapping(:dwell => "log10(dwell)", :intensity, color = :condition) *
+		(visual(Scatter, markersize=3.5, alpha=0.25)) +
+	data(get_pos_data(tuba1b202_data[occursin.("IVT", String.(tuba1b202_data.sample)), :], 1592)) *
+		mapping(:dwell => "log10(dwell)", :intensity, color = :condition) *
+		(visual(Scatter, markersize=3.5, alpha=0.55))) |> draw(scales(Color = (; palette = [:green, :purple]));
+																																												   axis = (; title = "TUBA1B-202, position 1592 (m5C)", limits = ((-3, 0), (55, 85))))
+
 # ╔═╡ Cell order:
 # ╠═4d706412-96c2-41f9-9c6b-be708fa6c1fd
 # ╠═1152cca8-5b2f-11f0-0f50-ef51dcc2e765
@@ -167,3 +199,10 @@ data(esrra_1489[esrra_1489.condition .!= "IVT", :]) * mapping(:dwell => "log10(d
 # ╠═23f93df5-2387-40c6-8058-adcb87d821b9
 # ╠═b76ab0a9-eae8-47b6-a947-df797d45fe5b
 # ╠═87236472-7532-4c35-bbc1-1179c0cb8a2a
+# ╠═29cd6526-b299-494b-a25a-1c9351af3566
+# ╠═a70a7c3c-c8e8-44a0-95e6-cf9728165fdb
+# ╠═099f9092-7b09-4628-bb93-36a496a6af72
+# ╠═1dff1fbf-b192-46cb-baaa-e41bb914ee35
+# ╠═069d3515-5272-45c3-82a1-f2dba73d9f5b
+# ╠═cbabb4a9-0797-4c97-9a5d-fa669b90284e
+# ╠═0557e28f-1164-4ce0-bdfc-b203cf1b43ae
