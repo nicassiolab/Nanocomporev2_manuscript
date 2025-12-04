@@ -182,7 +182,7 @@ ax_b = Axis(g2[1:2, 1:2],
 a, p, r = auprc(binned_rna002.predicted,
 		Int.(binned_rna002.modified),
 		Set([1]))
-lines!(ax_b, r, p,
+lines!(ax_b, r[r .> 1e-200], p[r .> 1e-200],
        label = "RNA002\nAUC=$(round(a; digits = 2))",
        color = COL_RNA002)
 p001 = precision(roc(binned_rna002.modified,
@@ -195,7 +195,7 @@ println("RNA002 precision = $p001, recall = $r001")
 a, p, r = auprc(binned_rna004.predicted,
 		Int.(binned_rna004.modified),
 		Set([1]))
-lines!(ax_b, r, p,
+lines!(ax_b, r[r .> 1e-200], p[r .> 1e-200],
        label = "RNA004\nAUC=$(round(a; digits = 2))",
        color = COL_RNA004)
 p001 = precision(roc(binned_rna004.modified,

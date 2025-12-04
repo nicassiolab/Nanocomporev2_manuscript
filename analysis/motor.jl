@@ -1108,14 +1108,14 @@ function plot_peak_dist_hist!(fig, gridpos, res, reference, peaks, motor_peaks; 
 	distances2d = distances2d[abs.(distances2d) .<= radius]
 	distances3d = distances3d[abs.(distances3d) .<= radius]
 
-	local distances = vcat(DataFrame(distance = distances2d, type = "2D"),
-						   DataFrame(distance = distances3d, type = "3D"))
+	local distances = vcat(DataFrame(distance = distances2d, type = "MD−"),
+						   DataFrame(distance = distances3d, type = "MD+"))
 
 	
 	plt = data(distances) *
 		  mapping(:distance => "Distance",
-				  color = :type => "GMM test",
-				  linestyle = :type => "GMM test") * 
+				  color = :type  => presorted => "GMM test",
+				  linestyle = :type => presorted => "GMM test") * 
 		  AlgebraOfGraphics.histogram(Stairs;
 									  normalization = :pdf,
 									  bins = -radius:(radius+1)) *
@@ -1751,7 +1751,7 @@ begin
 	local COL_2D = "#004488"  # "#3E8241" # "#17becf"
 	local COL_3D = "#D75F00" # "#6948A3" # "#bcbd22"
 	
-	local f = Figure(size = (1150, 1800),
+	local f = Figure(size = (1150, 1850),
 					 # fonts = (; regular = "fonts/cmunorm.ttf", bold = "fonts/cmunso.ttf"),
 					 fontsize = 26)
 	# local f = Figure(size = (9cm, 7cm), fontsize = 12pt)
@@ -1849,12 +1849,12 @@ begin
 			  linestyle = :solid,
 			  linewidth = 2.5,
 			  color = COL_2D,
-			  label = "2D")
+			  label = "MD−")
 	plot_prc!(ax,
 			  peakannot_002_p10.modified,
 		 	  peakannot_002_p10.predicted,
 		 	  sort(filter(v -> v > 0, peakannot_002_p10.predicted));
-			  label = "3D",
+			  label = "MD+",
 			  linestyle = :dash,
 			  linewidth = 2.5,
 			  color = COL_3D)
@@ -1874,12 +1874,12 @@ begin
 			  linestyle = :solid,
 			  linewidth = 2.5,
 			  color = COL_2D,
-			  label = "2D")
+			  label = "MD−")
 	plot_prc!(ax,
 			  peakannot_004_p12.modified,
 		 	  peakannot_004_p12.predicted,
 		 	  sort(filter(v -> v > 0, peakannot_004_p12.predicted));
-			  label = "3D",
+			  label = "MD+",
 			  linestyle = :dash,
 			  linewidth = 2.5,
 			  color = COL_3D)

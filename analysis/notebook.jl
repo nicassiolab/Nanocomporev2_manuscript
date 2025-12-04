@@ -25,7 +25,7 @@ include("lib.jl")
 import MultipleTesting
 
 # ╔═╡ b7f89781-6332-4942-8d5b-7d95e0550b63
-LOR_THRESHOLD = 0.5
+LOR_THRESHOLD = 0.8
 
 # ╔═╡ 6608e7a5-fde0-4f0c-9a33-a89c0fe0b858
 begin
