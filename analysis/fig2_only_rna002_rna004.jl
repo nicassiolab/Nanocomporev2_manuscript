@@ -205,6 +205,8 @@ r001 = recall(roc(binned_rna004.modified,
 scatter!(ax_b, [r001], [p001], color = COL_RNA004)
 println("RNA004 precision = $p001, recall = $r001")
 
+xlims!(ax_b, [0, 1])
+ylims!(ax_b, [0, 1])
 axislegend(ax_b, "Chemistry", position = :rt, labelsize = 12)
 
 
@@ -402,5 +404,6 @@ rowgap!(g2, 0)
 colgap!(g3, -15)
 rowgap!(g3, 0)
 
-save("fig_rna002_rna004_comparison.png", f)
+save("fig2_rna002_rna004_comparison.png", f)
+save("fig2_rna002_rna004_comparison.pdf", f)
 

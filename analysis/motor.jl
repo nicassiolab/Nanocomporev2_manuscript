@@ -13,6 +13,9 @@ Pkg.add("Peaks")
 # ╔═╡ f7b34149-9459-47fc-837b-43a581fc86ed
 Pkg.add("Typst_jll")
 
+# ╔═╡ b4cbe6a7-2556-40c5-b4f6-b0669045de5b
+Pkg.add("FileIO")
+
 # ╔═╡ f86b30f1-3a4d-4e7e-94f6-67ed90b5b239
 Pkg.add("ConfSets")
 
@@ -36,6 +39,9 @@ using AlgebraOfGraphics
 
 # ╔═╡ 9b2b3288-467b-4c5a-8972-4900b7182a17
 using Typst_jll
+
+# ╔═╡ 1a8b1be5-3801-4ee9-a4c5-5a3774fa9042
+using FileIO
 
 # ╔═╡ a3ec7589-3e97-4238-91d3-a4bc286fb486
 using ConfSets
@@ -735,6 +741,55 @@ begin
 					title = "Reference pseU sites",
 					xlabel = "|LORmotor| - |LOR|",
 				    ylabel = "-log10(𝑄-𝑣𝑎𝑙𝑢𝑒 motor) - -log10(𝑄-𝑣𝑎𝑙𝑢𝑒)",
+				    xticks = -3:1:3)
+
+	local color = map(r -> if r.predicted >= 2 && r.predicted_1 >= 2
+						       :black
+						   elseif r.predicted <= 2 && r.predicted_1 >= 2
+							   :orange
+						   elseif r.predicted >= 2 && r.predicted_1 <= 2
+							   :blue
+						   else
+							   :grey
+						   end, eachrow(pseUs))
+	
+	scatter!(ax, abs.(pseUs.GMM_LOR_1) .- abs.(pseUs.GMM_LOR),
+			 -log10.(pseUs.GMM_chi2_pvalue_1) .- -log10.(pseUs.GMM_chi2_pvalue),
+			 markersize = 6,
+			 color = color,
+			 alpha = 0.75)
+
+	local colorcounts = countmap(color)
+
+	Legend(f[1, 2],
+		   [PolyElement(color = :orange),
+			PolyElement(color = :blue),
+			PolyElement(color = :black),
+			PolyElement(color = :grey)],
+	       ["Becomes significant ($(colorcounts[:orange]))", "Becomes insignificant ($(colorcounts[:blue]))", "Remains significant ($(colorcounts[:black]))", "Remains insignificant ($(colorcounts[:grey]))"],
+		   orientation = :vertical,
+		   framevisible = false)
+	# pseUs[:, :change] = abs.(log2.(pseUs.predicted_1 ./ (pseUs.predicted .+ 1e-300)))
+	# sort(pseUs, :change, rev = true)
+
+	f
+end
+
+# ╔═╡ 204a6d66-0835-4aa0-bdf3-6fa527d5cd9a
+begin
+	local df = innerjoin(innerjoin(ivt, ivt_p12,
+								   on = [:ref_id, :pos],
+								   makeunique = true),
+						 mod_ref,
+						 on = [:chr, :strand, :genomicPos => :pos])
+
+	local pseUs = df[df.mod .== "Y", :]
+
+	local f = Figure()
+	local ax = Axis(f[1, 1],
+					title = "Reference pseudouridine sites",
+					xlabel = "|LORmotor| - |LOR|",
+				    ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒 motor) + log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
 				    xticks = -3:1:3)
 
 	local color = map(r -> if r.predicted >= 2 && r.predicted_1 >= 2
@@ -1744,6 +1799,11 @@ L"\textbf{KS(intensity) and KS(dwell) correlation}"
 # ╔═╡ 1069343c-a14b-42ae-bb1d-a2c5ae2d06c5
 L"\textbf{RNA002: KS}_{\large{intensity}}-\textbf{KS}_{dwell}\textbf{ correlation}" 
 
+# ╔═╡ b459464a-8566-4a0c-bfb3-6e4a2135e96b
+md"""
+## Final plot
+"""
+
 # ╔═╡ 64ed1f82-51f0-448f-8e54-a8565898774c
 begin
 	local COL_ALL_SITES = :black # "#7f7f7f22"
@@ -1760,6 +1820,9 @@ begin
 
 	local cor_maxy = 0.21
 	local markersize = 9
+
+	local ax = Axis(f[0, 1:2])
+	ax
 
 	local ax = Axis(f[1, 1],
 				    title="RNA002",
@@ -1897,8 +1960,8 @@ begin
 	# colsize!(f.layout, 4, Fixed(450))
 	rowsize!(f.layout, 1, Fixed(20))
 
-	for (label, layout) in zip(["A", "B", "C", "D", "E", "F"],
-							   [f[2, 1], f[2, 2], f[3, 1], f[3, 2], f[4, 1], f[4, 2]])
+	for (label, layout) in zip(["B", "C", "D"],
+							   [f[2, 1], f[3, 1], f[4, 1]])
 	    Label(layout[1, 1, TopLeft()], label,
 	        fontsize = 26,
 	        font = :bold,
@@ -1914,7 +1977,7 @@ begin
 	local COL_2D = "#004488"  # "#3E8241" # "#17becf"
 	local COL_3D = "#D75F00" # "#6948A3" # "#bcbd22"
 
-	local f = Figure(size = (1200, 600))
+	local f = Figure(size = (900, 450))
 	
 	local peakannot_002_binned = copy(peakannot_002)
 	peakannot_002_binned[!, :bin] = div.(peakannot_002.genomicPos, BIN_SIZE)
@@ -1928,24 +1991,24 @@ begin
 								   :predicted => maximum =>  :predicted)
 	
 	local ax = Axis(f[1, 1],
-				    title = L"\textbf{RNA002: binned}",
+				    title = "RNA002",
 				    aspect = 1)
 	plot_prc!(ax,
 			 peakannot_002_binned.modified,
 		 	 peakannot_002_binned.predicted,
 		 	 sort(filter(v -> v > 0, peakannot_002_binned.predicted));
 			 linestyle = :solid,
-			 label = "Default",
+			 label = "MD−",
 			 color = COL_2D)
 	plot_prc!(ax,
 			 peakannot_002_p10_binned.modified,
 		 	 peakannot_002_p10_binned.predicted,
 		 	 sort(filter(v -> v > 0, peakannot_002_p10_binned.predicted));
-			 label = "Motor",
+			 label = "MD+",
 			 linestyle = :dash,
 			 color = COL_3D)
 
-	axislegend(ax, L"\textbf{GMM test}")
+	axislegend(ax, "GMM test}")
 
 	local peakannot_004_binned = copy(peakannot_004)
 	peakannot_004_binned[!, :bin] = div.(peakannot_004.genomicPos, BIN_SIZE)
@@ -1959,24 +2022,24 @@ begin
 								   :predicted => maximum =>  :predicted)
 	
 	local ax = Axis(f[1, 2],
-				    title = L"\textbf{RNA004: binned}",
+				    title = "RNA004",
 				    aspect = 1)
 	plot_prc!(ax,
 			 peakannot_004_binned.modified,
 		 	 peakannot_004_binned.predicted,
 		 	 sort(filter(v -> v > 0, peakannot_004_binned.predicted));
 			 linestyle = :solid,
-			 label = "Default",
+			 label = "MD−",
 			 color = COL_2D)
 	plot_prc!(ax,
 			 peakannot_004_p12_binned.modified,
 		 	 peakannot_004_p12_binned.predicted,
 		 	 sort(filter(v -> v > 0, peakannot_004_p12_binned.predicted));
-			 label = "Motor",
+			 label = "MD+",
 			 linestyle = :dash,
 			 color = COL_3D)
 
-	axislegend(ax, L"\textbf{GMM test}")
+	axislegend(ax, "GMM test")
 	
 	f
 end
@@ -2650,6 +2713,7 @@ sort(rna002_tx.GMM_chi2_pvalue)
 # ╠═a65a2f01-6f6f-4627-8f40-42095a410251
 # ╠═32d711b6-9c46-4f10-8b53-2dca3669ac7b
 # ╠═1e30107f-49c3-4479-be52-347d4ebb6ac0
+# ╠═204a6d66-0835-4aa0-bdf3-6fa527d5cd9a
 # ╟─fc6da8ec-a2b3-4786-ae9a-978c28d66872
 # ╠═6dd6aac1-058f-4269-81ad-c5b727229fe3
 # ╠═852fc9dd-0ba1-4c95-baea-19846e5403dc
@@ -2709,6 +2773,9 @@ sort(rna002_tx.GMM_chi2_pvalue)
 # ╠═99c5d277-0490-44bf-83a4-85e34d8daec6
 # ╠═3eb319a8-f26a-4508-a749-2d539c021600
 # ╠═1069343c-a14b-42ae-bb1d-a2c5ae2d06c5
+# ╠═b459464a-8566-4a0c-bfb3-6e4a2135e96b
+# ╠═b4cbe6a7-2556-40c5-b4f6-b0669045de5b
+# ╠═1a8b1be5-3801-4ee9-a4c5-5a3774fa9042
 # ╠═64ed1f82-51f0-448f-8e54-a8565898774c
 # ╠═a5d05c3c-6dfd-414e-be41-5d032ece5561
 # ╠═ce755b22-4dc5-4734-be8d-bf50264cf9aa

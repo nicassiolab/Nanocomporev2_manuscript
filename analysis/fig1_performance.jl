@@ -74,6 +74,7 @@ for (label, layout) in zip(["A", "B", "C", "D"],
         halign = :right)
 end
 
-save("fig_performance.png", f)
+save("fig1_performance.png", f)
+save("fig1_performance.pdf", f)
 
 

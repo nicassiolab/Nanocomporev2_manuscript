@@ -260,28 +260,492 @@ v1_v2_common = innerjoin(v1_results, rna002_tx,
 		  				 on = [:ref_id, :pos],
 		  				 renamecols = "_v1" => "_v2")
 
+# ╔═╡ a8dbf627-e757-4332-bad1-93b9c75dfc7b
+rna002_tx2 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0/out_nanocompore_results.tsv", delim = '\t'))
+
+# ╔═╡ 909ef769-1977-4b79-98f3-3f294365cfa6
+v1_v2_common2 = innerjoin(v1_results, rna002_tx2,
+		  				 on = [:ref_id, :pos],
+		  				 renamecols = "_v1" => "_v2")
+
 # ╔═╡ 884239d8-5613-44bc-a14c-348b3e31d3c3
 begin
 	local common = copy(v1_v2_common[v1_v2_common.GMM_pvalue_v1 .!== missing .&& v1_v2_common.GMM_chi2_pvalue_v2 .!== missing, :])
 	local pvals1 = -log10.(clamp.(common.GMM_pvalue_v1, 1e-300, 1))
 	local pvals2 = -log10.(clamp.(common.GMM_chi2_pvalue_v2, 1e-300, 1))
-	pvals1 = ifelse.(abs.(common.GMM_LOR_v1) .< 0.5, 0, pvals1)
-	pvals2 = ifelse.(abs.(common.GMM_LOR_v2) .< 0.5, 0, pvals2)
+	pvals1 = ifelse.(abs.(common.GMM_LOR_v1) .< 0.8, 0, pvals1)
+	pvals2 = ifelse.(abs.(common.GMM_LOR_v2) .< 0.8, 0, pvals2)
 
 	println(cor(pvals1, pvals2))
+
+	println(sum(pvals1 .> 2 .&& pvals2 .== 0))
+	println(length(pvals1))
+
+	println(sum((pvals1 .> 2 .&& pvals2 .== 0) .|| (pvals1 .== 0 .&& pvals2 .> 2)))
+	println(sum((pvals1 .> 2 .&& pvals2 .== 0) .|| (pvals1 .== 0 .&& pvals2 .> 2))/length(pvals1))
+
+
+	println(sum((pvals1 .< 0.01) .!= (pvals2 .< 0.01)))
 	
 	# common = common[.! (pvals1 .== 0 .&& pvals2 .== 0), :]
 	# local selected = pvals1 .!= 0 .|| pvals2 .!= 0
 	
-	scatter(pvals1,
-			pvals2,
-			markersize = 5,
-			color = :black,
-		    axis = (;
-					aspect = 1,
-				    xlabel = "v1: -log₁₀(𝑃-value)",
-				    ylabel = "v2: -log₁₀(𝑃-value)"))
+	# scatter(pvals1,
+	# 		pvals2,
+	# 		markersize = 5,
+	# 		color = :black,
+	# 	    axis = (;
+	# 				aspect = 1,
+	# 			    xlabel = "v1: -log₁₀(𝑃-value)",
+	# 			    ylabel = "v2: -log₁₀(𝑃-value)"))
+
+	# data(DataFrame(p1 = Float64.(pvals1), p2 = Float64.(pvals2))) *
+	# 	mapping(:p1, (:p1, :p2) => ((p1, p2) -> p2 - p1)) *
+	# 	visual(Scatter; markersize = 5) |> draw(; axis = (; xlabel = "v1: -log₁₀(𝑃-value)", ylabel = "v2 - v1"))
+		
+
+	data(DataFrame(p1 = Float64.(pvals1), p2 = Float64.(pvals2))) *
+		mapping(:p1, :p2) *
+		visual(Scatter; markersize = 5) |>
+		draw(;
+			 axis = (;
+					 aspect = 1,
+					 xlabel = "v1: -log₁₀(𝑃-value)",
+					 ylabel = "v2: -log₁₀(𝑃-value)"))
+	
+	
 	# data(DataFrame(v1 = pvals1, v2 = pvals2)) * mapping(:v1 => "v1: -log₁₀(𝑃-value)", :v2 => "v2: -log₁₀(𝑃-value)") * visual(Scatter, markersize = 5) |> draw
+end
+
+# ╔═╡ 2c0771e0-f8b0-4d1d-ad1c-3c34110f3d8c
+begin
+	local common = copy(v1_v2_common[v1_v2_common.GMM_pvalue_v1 .!== missing .&& v1_v2_common.GMM_chi2_pvalue_v2 .!== missing, :])
+	local pvals1 = -log10.(clamp.(common.GMM_pvalue_v1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(common.GMM_chi2_pvalue_v2, 1e-300, 1))
+	pvals1 = ifelse.(abs.(common.GMM_LOR_v1) .< 0.8, 0, pvals1)
+	pvals2 = ifelse.(abs.(common.GMM_LOR_v2) .< 0.8, 0, pvals2)
+
+	println(cor(pvals1, pvals2))
+
+
+	println(sum(pvals1 .> 2 .&& pvals2 .== 0))
+	println(length(pvals1))
+
+	local sig_v1 = pvals1 .> 2
+	local sig_v2 = pvals2 .> -log10(0.01)
+	
+	println(sum((pvals1 .> 2 .&& pvals2 .== 0) .|| (pvals1 .== 0 .&& pvals2 .> 2)))
+	println(sum((pvals1 .> 2 .&& pvals2 .== 0) .|| (pvals1 .== 0 .&& pvals2 .> 2))/length(pvals1))
+
+
+	println(sum(sig_v1), " ", sum(sig_v2))
+	println(sum(sig_v1 .!= sig_v2))
+	
+	# common = common[.! (pvals1 .== 0 .&& pvals2 .== 0), :]
+	# local selected = pvals1 .!= 0 .|| pvals2 .!= 0
+	local fig = Figure()
+	
+	local ax = Axis(fig[1, 1])
+	local N = length(pvals1)
+	
+	local cont = [sum(.! sig_v1 .&& .! sig_v2) sum(.! sig_v1 .&& sig_v2);
+				  sum(sig_v1 .&& .! sig_v2) sum(sig_v1 .&& sig_v2)]
+
+	println(cont)
+	
+	# local ax2 = Axis(fig[2, 1])
+	# scatter!(ax2,
+	# 		 pvals1,
+	# 		 pvals2,
+	# 		 markersize = 5,
+	# 		 color = :black,
+	# 	     axis = (;
+	# 				 aspect = 1,
+	# 			     xlabel = "v1: -log₁₀(𝑃-value)",
+	# 			     ylabel = "v2: -log₁₀(𝑃-value)"))
+
+	# data(DataFrame(p1 = Float64.(pvals1), p2 = Float64.(pvals2))) *
+	# 	mapping(:p1, (:p1, :p2) => ((p1, p2) -> p2 - p1)) *
+	# 	visual(Scatter; markersize = 5) |> draw(; axis = (; xlabel = "v1: -log₁₀(𝑃-value)", ylabel = "v2 - v1"))
+		
+
+	# data(DataFrame(p1 = Float64.(pvals1), p2 = Float64.(pvals2))) *
+	# 	mapping(:p1, :p2) *
+	# 	(linear() + visual(Scatter; markersize = 5)) |>
+	# 	draw(;
+	# 		 axis = (;
+	# 				 aspect = 1,
+	# 				 xlabel = "v1: -log₁₀(𝑃-value)",
+	# 				 ylabel = "v2: -log₁₀(𝑃-value)"))
+	
+	
+	# data(DataFrame(v1 = pvals1, v2 = pvals2)) * mapping(:v1 => "v1: -log₁₀(𝑃-value)", :v2 => "v2: -log₁₀(𝑃-value)") * visual(Scatter, markersize = 5) |> draw
+end
+
+# ╔═╡ 4768a745-a252-4a57-8a48-379456a2794e
+[4613849 1710;
+ 5226 3254]
+
+# ╔═╡ 37c2bd12-0053-4d2d-821d-c696818daf5e
+filter(r -> r.GMM_pvalue_v1 !== missing && r.GMM_chi2_pvalue_v2 !== missing &&(r.GMM_pvalue_v1 < 0.01) != (r.GMM_chi2_pvalue_v2 < 0.01), v1_v2_common2)
+
+# ╔═╡ 195cbfcf-a5be-427a-b06d-a0402dbd09ef
+begin
+	local common = copy(v1_v2_common[v1_v2_common.GMM_pvalue_v1 .!== missing .&& v1_v2_common.GMM_chi2_pvalue_v2 .!== missing, :])
+	local pvals1 = -log10.(clamp.(common.GMM_pvalue_v1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(common.GMM_chi2_pvalue_v2, 1e-300, 1))
+	pvals1 = ifelse.(abs.(common.GMM_LOR_v1) .< 0.8, 0, pvals1)
+	pvals2 = ifelse.(abs.(common.GMM_LOR_v2) .< 0.8, 0, pvals2)
+
+	local sig_v1 = pvals1 .> 2
+	local sig_v2 = pvals2 .> -log10(0.01)
+	
+	common[sig_v1 .!= sig_v2, :]
+end
+
+# ╔═╡ 7a2a429f-fea2-4066-9b34-0ae3b3e2445d
+begin
+	rna002_tx72 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0_seed_72/out_nanocompore_results.tsv", delim = '\t'))
+	rna002_tx72[:, :GMM_chi2_pvalue] = ifelse.(rna002_tx72.GMM_chi2_pvalue .=== missing,
+											   1,
+											   rna002_tx72.GMM_chi2_pvalue)
+	rna002_tx72[:, :GMM_LOR] = ifelse.(rna002_tx72.GMM_LOR .=== missing,
+									   0,
+									   rna002_tx72.GMM_LOR)
+	rna002_tx72
+end
+
+# ╔═╡ a4d42bec-c67c-48e7-a1c1-e1e667b0dab5
+count_cols = ["$(cond)_$(samp)" for cond in ["WT", "STORM"] for samp in [1, 2, 3]]
+
+# ╔═╡ f0126310-f889-45bd-b7be-3ef904e1d966
+begin
+	local df = innerjoin(rna002_tx,
+						 rna002_tx72,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+	df = df[df.GMM_chi2_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+
+	# # replicate v1 filtering
+	# df = filter(r -> all((r[col * "_mod1"] + r[col * "_unmod1"] >= 30 &&
+	# 	                  r[col * "_mod2"] + r[col * "_unmod2"] >= 30)
+	# 					 for col in count_cols),
+	# 			df)
+	# df[!, :GMM_chi2_qvalue1] = MultipleTesting.adjust(
+	# 	disallowmissing(df.GMM_chi2_pvalue1),
+	# 	MultipleTesting.BenjaminiHochberg())
+	# df[!, :GMM_chi2_qvalue2] = MultipleTesting.adjust(
+	# 	disallowmissing(df.GMM_chi2_pvalue2),
+	# 	MultipleTesting.BenjaminiHochberg())
+	# println(nrow(df))
+	
+	local pvals1 = -log10.(clamp.(df.GMM_chi2_qvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_qvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	v2_seeds_common = df
+	v2_seeds_common[!, :prediction1] = pred1
+	v2_seeds_common[!, :prediction2] = pred2
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	local total_cov = v2_seeds_common.WT_1_mod1 .+ v2_seeds_common.WT_1_unmod1 .+ v2_seeds_common.WT_2_mod1 .+ v2_seeds_common.WT_2_unmod1 .+ v2_seeds_common.WT_3_mod1 .+ v2_seeds_common.WT_3_unmod1 .+ v2_seeds_common.STORM_1_mod1 .+ v2_seeds_common.STORM_1_unmod1 .+ v2_seeds_common.STORM_2_mod1 .+ v2_seeds_common.STORM_2_unmod1 .+ v2_seeds_common.STORM_3_mod1 .+ v2_seeds_common.STORM_3_unmod1
+	v2_seeds_common[!, :total_cov] = total_cov
+
+	v2_seeds_common[!, :category] = string.(Int.(sig1)) .* string.(Int.(sig2))
+
+	# sig1 = sig1[total_cov .> 900]
+	# sig2 = sig2[total_cov .> 900]
+
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ 9a3e5ee2-b08c-457c-b674-54d95a4ef568
+
+
+# ╔═╡ 8e21bf75-129d-4f23-b6bc-13be787400c0
+((v2_seeds_common.WT_1_mod1 .+ v2_seeds_common.WT_1_unmod1 .+ v2_seeds_common.WT_2_mod1 .+ v2_seeds_common.WT_2_unmod1 .+ v2_seeds_common.WT_3_mod1 .+ v2_seeds_common.WT_3_unmod1 .+ v2_seeds_common.STORM_1_mod1 .+ v2_seeds_common.STORM_1_unmod1 .+ v2_seeds_common.STORM_2_mod1 .+ v2_seeds_common.STORM_2_unmod1 .+ v2_seeds_common.STORM_3_mod1 .+ v2_seeds_common.STORM_3_unmod1) .!= ((v2_seeds_common.WT_1_mod2 .+ v2_seeds_common.WT_1_unmod2 .+ v2_seeds_common.WT_2_mod2 .+ v2_seeds_common.WT_2_unmod2 .+ v2_seeds_common.WT_3_mod2 .+ v2_seeds_common.WT_3_unmod2 .+ v2_seeds_common.STORM_1_mod2 .+ v2_seeds_common.STORM_1_unmod2 .+ v2_seeds_common.STORM_2_mod2 .+ v2_seeds_common.STORM_2_unmod2 .+ v2_seeds_common.STORM_3_mod2 .+ v2_seeds_common.STORM_3_unmod2))) |> argmax
+
+# ╔═╡ fc7f2779-56eb-4a13-923f-7e5b395bad22
+v2_seeds_common[22381723, :]
+
+# ╔═╡ 5860ba83-ef21-4762-be75-92c353250bd9
+data(v2_seeds_common) *
+	mapping(:category, :total_cov => log10 => "log10(coverage)") *
+	visual(Violin) |> draw(; axis = (; title = "V2 seed 1 vs V2 seed 2"))
+
+# ╔═╡ c41d1023-8bf1-4f9e-9f11-bdfc823011c6
+begin
+	local v1_results_part2 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_part2/out_nanocompore_results_manual_db_export2.tsv",
+		delim = '\t'))
+
+	local df = innerjoin(v1_results_part2,
+						 rna002_tx,
+						 on = [:ref_id, :pos],
+						 renamecols = "_v1" => "_v2")
+
+	local pvals1 = -log10.(clamp.(df.GMM_pvalue_v1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_pvalue_v2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR_v1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR_v2) .< 0.8, 0, pvals2)
+
+	df[!, :prediction1] = pred1
+	df[!, :prediction2] = pred2
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	local total_cov = df.WT_1_mod_v2 .+ df.WT_1_unmod_v2 .+ df.WT_2_mod_v2 .+ df.WT_2_unmod_v2 .+ df.WT_3_mod_v2 .+ df.WT_3_unmod_v2 .+ df.STORM_1_mod_v2 .+ df.STORM_1_unmod_v2 .+ df.STORM_2_mod_v2 .+ df.STORM_2_unmod_v2 .+ df.STORM_3_mod_v2 .+ df.STORM_3_unmod_v2
+	df[!, :total_cov_v2] = total_cov
+	df[!, :category] = string.(Int.(sig1)) .* string.(Int.(sig2))
+
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+	println(cont)
+
+	data(df) *
+	mapping((:total_cov_v1, :total_cov_v2) => ((c1, c2) -> mean([c1, c2])/1000) => "mean coverage, thousands",
+		    (:total_cov_v1, :total_cov_v2) => ((c1, c2) -> mean(abs.([c1, c2] .- c1))) => "MAE(coverage)",
+		    layout = :category) *
+	visual(Scatter, markersize = 5) |> draw
+end
+
+# ╔═╡ 6426a373-52af-4aa3-83e6-ac9ccdac4b10
+v1_seed72_part = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_seed_72/intermediary_results.tsv",
+		delim = '\t'))
+
+# ╔═╡ 68e0a3ff-8f16-4265-ba51-2d7de6a6609c
+begin
+	v1_seed72 = DataFrame(CSV.File(
+		"/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_v1_seed_72/outnanocompore_results.tsv",
+		delim = '\t'))
+	v1_seed72[!, :Logit_LOR] = [v == "NC" ? NaN : parse(Float64, v) for v in v1_seed72.Logit_LOR]
+	v1_seed72
+end
+
+# ╔═╡ d69d49ef-0d20-43db-8426-f86244a2c355
+median(v1_seed72_part.total_cov)
+
+# ╔═╡ a30fb438-2ed0-4fed-b467-6a6dc8fcbc41
+median(rna002_tx72.WT_1_mod .+ rna002_tx72.WT_1_unmod .+ rna002_tx72.WT_2_mod .+ rna002_tx72.WT_2_unmod .+ rna002_tx72.WT_3_mod .+ rna002_tx72.WT_3_unmod .+ rna002_tx72.STORM_1_mod .+ rna002_tx72.STORM_1_unmod .+ rna002_tx72.STORM_2_mod .+ rna002_tx72.STORM_2_unmod .+ rna002_tx72.STORM_3_mod .+ rna002_tx72.STORM_3_unmod)
+
+# ╔═╡ 13cc3c2a-b2ad-4390-aac8-19f4083ce04f
+MultipleTesting.BenjaminiHochberg([1, 2, 3])
+
+# ╔═╡ e0ad4e4d-b921-4653-8ecb-3235fbd3201a
+begin
+	local df = innerjoin(v1_results,
+						 v1_seed72_part,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+	df[!, :GMM_pvalue1] = MultipleTesting.adjust(
+		df.GMM_pvalue1,
+		MultipleTesting.BenjaminiHochberg())
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ 3123f453-991a-40ac-b800-a516d8168aad
+begin
+	local df = innerjoin(v1_results,
+						 v1_seed72,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+	# the old v1 results were exported piecewise and the multiple testing correction
+	# was not done by Nanocompore, whereas the newer v1 rseults were corrected
+	# by the tool.
+	df[!, :GMM_pvalue1] = MultipleTesting.adjust(
+		df.GMM_pvalue1,
+		MultipleTesting.BenjaminiHochberg())
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_logit_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.Logit_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ d443ff09-030c-4206-8ed2-9f167d86f39f
+begin
+	kmeans_high_42 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0_test_kmeans_iters_seed_42/out_nanocompore_results.tsv", delim = '\t'))
+	kmeans_high_42[:, :GMM_chi2_pvalue] = ifelse.(kmeans_high_42.GMM_chi2_pvalue .=== missing,
+											   1,
+											   kmeans_high_42.GMM_chi2_pvalue)
+	kmeans_high_42[:, :GMM_LOR] = ifelse.(kmeans_high_42.GMM_LOR .=== missing,
+									   0,
+									   kmeans_high_42.GMM_LOR)
+	kmeans_high_42
+end
+
+# ╔═╡ 143f3c1d-1727-4d99-9a08-f86aa56e9d55
+begin
+	kmeans_low_42 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0_test_kmeans_low_iters_seed_42/out_nanocompore_results.tsv", delim = '\t'))
+	kmeans_low_42[:, :GMM_chi2_pvalue] = ifelse.(kmeans_low_42.GMM_chi2_pvalue .=== missing,
+											   1,
+											   kmeans_low_42.GMM_chi2_pvalue)
+	kmeans_low_42[:, :GMM_LOR] = ifelse.(kmeans_low_42.GMM_LOR .=== missing,
+									   0,
+									   kmeans_low_42.GMM_LOR)
+	kmeans_low_42
+end
+
+# ╔═╡ d870c60d-db34-4c64-a3f0-9d7bcc5c230b
+begin
+	kmeans_high_72 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0_test_kmeans_iters_seed_72/out_nanocompore_results.tsv", delim = '\t'))
+	kmeans_high_72[:, :GMM_chi2_pvalue] = ifelse.(kmeans_high_72.GMM_chi2_pvalue .=== missing,
+											   1,
+											   kmeans_high_72.GMM_chi2_pvalue)
+	kmeans_high_72[:, :GMM_LOR] = ifelse.(kmeans_high_72.GMM_LOR .=== missing,
+									   0,
+									   kmeans_high_72.GMM_LOR)
+	kmeans_high_72
+end
+
+# ╔═╡ a6ef0a3c-6e6d-4982-a4dd-3bf1c3279988
+begin
+	kmeans_low_72 = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_STORM_eventalign_v2.0.0_test_kmeans_low_iters_seed_72/out_nanocompore_results.tsv", delim = '\t'))
+	kmeans_low_72[:, :GMM_chi2_pvalue] = ifelse.(kmeans_low_72.GMM_chi2_pvalue .=== missing,
+											   1,
+											   kmeans_low_72.GMM_chi2_pvalue)
+	kmeans_low_72[:, :GMM_LOR] = ifelse.(kmeans_low_72.GMM_LOR .=== missing,
+									   0,
+									   kmeans_low_72.GMM_LOR)
+	kmeans_low_72
+end
+
+# ╔═╡ d5851864-3ab1-47b6-8698-3c40c93d82ba
+kmeans_high_42.ref_id |> unique |> length
+
+# ╔═╡ 25c7b7b9-7242-4ee2-8b3b-4b1f7f484920
+begin
+	local df = innerjoin(kmeans_high_42,
+						 kmeans_high_72,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_chi2_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ 364ff6ad-96c8-4a76-80cb-f1f2666e3b9b
+begin
+	local df = innerjoin(kmeans_low_42,
+						 kmeans_low_72,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_chi2_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ 8c629a0b-ec9c-40f0-9255-902f4d22036d
+begin
+	local df = innerjoin(kmeans_low_72,
+						 kmeans_high_72,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_chi2_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ f73dc41a-8288-4b44-89b8-d8e806abbe56
+begin
+	local df = innerjoin(kmeans_low_42,
+						 kmeans_high_42,
+						 on = [:ref_id, :pos],
+						 renamecols = "1" => "2")
+
+	# df = df[df.GMM_pvalue1 .!== missing .&& df.GMM_chi2_pvalue2 .!== missing, :]
+	local pvals1 = -log10.(clamp.(df.GMM_chi2_pvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(df.GMM_chi2_pvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(df.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(df.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	local sig1 = pred1 .> 2
+	local sig2 = pred2 .> 2
+
+	println(sum(sig1), " ", sum(sig2))
+	println(sum(sig1 .!= sig2))
+	local cont = [sum(.! sig1 .&& .! sig2) sum(.! sig1 .&& sig2);
+				  sum(sig1 .&& .! sig2) sum(sig1 .&& sig2)]
+end
+
+# ╔═╡ fadb14fe-b07d-470a-ab91-12baedc77c8f
+begin
+	local df = filter(r -> r.GMM_pvalue_v1 !== missing && r.GMM_chi2_pvalue_v2 !== missing &&(r.GMM_pvalue_v1 < 0.01) != (r.GMM_chi2_pvalue_v2 < 0.01), v1_v2_common2)
+	data(df) *
+		mapping(:GMM_pvalue_v1 => (x -> -log10(x)), :GMM_chi2_pvalue_v2 => (x -> -log10(x))) *
+		visual(Scatter; markersize = 5) |> draw
+	# Makie.density(log2.(-log10.(df.GMM_pvalue_v1) ./ -log10.(df.GMM_chi2_pvalue_v2)))
+end
+
+# ╔═╡ e743be52-9522-4fd5-b2f5-3719ab7f6894
+begin
+	local df = filter(r -> r.GMM_pvalue_v1 !== missing && r.GMM_chi2_pvalue_v2 !== missing &&(r.GMM_pvalue_v1 < 0.01) != (r.GMM_chi2_pvalue_v2 < 0.01), v1_v2_common2)
+	data(df) *
+		mapping((:GMM_pvalue_v1, :GMM_chi2_pvalue_v2) => ((p1, p2) -> -log10(p1) + log10(p2)), (:GMM_LOR_v1, :GMM_LOR_v2) => ((l1, l2) -> l1 - l2)) *
+		visual(Scatter; markersize = 5) |> draw(; axis = (; xlabel = "-log10(pval1) + log10(pval2)", ylabel = "lor1 - lor2"))
+	# Makie.density(log2.(-log10.(df.GMM_pvalue_v1) ./ -log10.(df.GMM_chi2_pvalue_v2)))
 end
 
 # ╔═╡ 866b5d33-c2a7-4400-845e-50575053be71
@@ -320,6 +784,76 @@ begin
 	binned_v1_v2_common[:, :predicted_v1] = -log10.(binned_v1_v2_common.GMM_qvalue_v1)
 	binned_v1_v2_common[:, :predicted_v2] = -log10.(binned_v1_v2_common.GMM_qvalue_v2)
 	binned_v1_v2_common
+end
+
+# ╔═╡ b43a7b79-6521-4594-bc04-33b4f3004e3e
+begin
+	local sig_v1 = binned_v1_v2_common.predicted_v1 .> 2
+	local sig_v2 = binned_v1_v2_common.predicted_v2 .> -log10(0.01)
+	println(sum(sig_v1), " ", sum(sig_v2))
+	println(sum(sig_v1 .!= sig_v2))
+	local cont = [sum(.! sig_v1 .&& .! sig_v2) sum(.! sig_v1 .&& sig_v2);
+				  sum(sig_v1 .&& .! sig_v2) sum(sig_v1 .&& sig_v2)]
+end
+
+# ╔═╡ 573a26d2-d2fe-468b-b568-cf339e1fa44f
+begin
+	begin
+	local rocs1 = roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v1, nrow(binned_v1_v2_common))
+	local precisions1 = vcat([0], map(precision, rocs1), [1])
+	local recalls1 = vcat([1], map(recall, rocs1), [0])
+	local rocs2 = roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v2, nrow(binned_v1_v2_common))
+	local precisions2 = vcat([0], map(precision, rocs2), [1])
+	local recalls2 = vcat([1], map(recall, rocs2), [0])
+
+	local combined_pred = max.(binned_v1_v2_common.predicted_v1, binned_v1_v2_common.predicted_v2)
+
+	local rocs3 = roc(binned_v1_v2_common.modified,
+			     	  combined_pred, nrow(binned_v1_v2_common))
+	local precisions3 = vcat([0], map(precision, rocs3), [1])
+	local recalls3 = vcat([1], map(recall, rocs3), [0])
+
+	local df1 = DataFrame(precision = precisions1, recall = recalls1)
+	df1[:, :version] .= "v1"
+	local df2 = DataFrame(precision = precisions2, recall = recalls2)
+	df2[:, :version] .= "v2"
+	local df3 = DataFrame(precision = precisions3, recall = recalls3)
+	df3[:, :version] .= "combined"
+
+	local df = vcat(df1, df2, df3)
+
+	local p001_v1 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+	local r001_v1 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v1 .>= -log10(0.01)))
+
+	local p001_v2 = precision(roc(binned_v1_v2_common.modified,
+			     binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+	local r001_v2 = recall(roc(binned_v1_v2_common.modified,
+	    		  binned_v1_v2_common.predicted_v2 .>= -log10(0.01)))
+
+	local p001_c = precision(roc(binned_v1_v2_common.modified,
+			     combined_pred .>= -log10(0.01)))
+	local r001_c = recall(roc(binned_v1_v2_common.modified,
+	    		  combined_pred .>= -log10(0.01)))
+
+	
+	
+	(
+		data(df) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Lines)
+		+
+		data(DataFrame(precision = [p001_v1, p001_v2, p001_c], recall = [r001_v1, r001_v2, r001_c], version = ["v1", "v2", "combined"])) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Scatter)
+	) |> draw(scales(Color = (; palette = [:black, COL_RNA002, :orange])); axis = (; aspect = 1))
+end
+end
+
+# ╔═╡ 6c44da09-4868-4a1a-beda-ff2a7df80bc6
+begin
+	local sig_v1 = binned_v1_v2_common.predicted_v1 .> 2
+	local sig_v2 = binned_v1_v2_common.predicted_v2 .> -log10(0.01)
+	binned_v1_v2_common[sig_v1 .!= sig_v2, :]
 end
 
 # ╔═╡ 9193fd14-d45c-4534-a029-75ab8171ea40
@@ -393,6 +927,89 @@ begin
 	axislegend(ax, "Version", position = :rt, labelsize = 12)
 	
 	f
+end
+
+# ╔═╡ 539fbed9-b5ba-4e91-addc-fbfb5d617563
+begin
+	local common = copy(v2_seeds_common)
+	common[:, :bin] = map(pos -> div(pos, BIN_SIZE), common.genomicPos1)
+
+	# col_selector = (pred, col) -> col[argmax(pred)]
+	binned_v2_seeds_common = combine(groupby(common, [:chr1, :strand1, :bin]),
+			    [:prediction1, :GMM_LOR1] => col_selector => :GMM_LOR1,
+		    [:prediction1, :GMM_chi2_pvalue1] => col_selector => :GMM_chi2_pvalue1,
+			[:prediction1, :GMM_chi2_qvalue1] => col_selector => :GMM_chi2_qvalue1,
+		    [:prediction2, :GMM_LOR2] => col_selector => :GMM_LOR2,
+		    [:prediction2, :GMM_chi2_pvalue2] => col_selector => :GMM_chi2_pvalue2,
+			[:prediction2, :GMM_chi2_qvalue2] => col_selector => :GMM_chi2_qvalue2)
+	binned_v2_seeds_common = rename!(binned_v2_seeds_common, :chr1 => :chr, :strand1 
+	=> :strand)
+	
+	local pvals1 = -log10.(clamp.(binned_v2_seeds_common.GMM_chi2_qvalue1, 1e-300, 1))
+	local pvals2 = -log10.(clamp.(binned_v2_seeds_common.GMM_chi2_qvalue2, 1e-300, 1))
+	local pred1 = ifelse.(abs.(binned_v2_seeds_common.GMM_LOR1) .< 0.8, 0, pvals1)
+	local pred2 = ifelse.(abs.(binned_v2_seeds_common.GMM_LOR2) .< 0.8, 0, pvals2)
+
+	binned_v2_seeds_common[!, :prediction1] = pred1
+	binned_v2_seeds_common[!, :prediction2] = pred2
+
+	binned_v2_seeds_common = leftjoin(binned_v2_seeds_common, binned_glori,
+								   on = [:chr, :strand, :bin])
+	binned_v2_seeds_common[:, :modified] = coalesce.(binned_v2_seeds_common.modified, 0)
+	binned_v2_seeds_common[:, :ratio] = coalesce.(binned_v2_seeds_common.ratio, 0)
+	binned_v2_seeds_common = dropmissing(binned_v2_seeds_common, disallowmissing = true)
+
+	binned_v2_seeds_common
+end
+
+# ╔═╡ 6f43d818-7f29-4ea8-aa26-ac72be12b873
+begin
+	local rocs1 = roc(binned_v2_seeds_common.modified,
+			     binned_v2_seeds_common.prediction1, nrow(binned_v2_seeds_common))
+	local precisions1 = vcat([0], map(precision, rocs1), [1])
+	local recalls1 = vcat([1], map(recall, rocs1), [0])
+	local rocs2 = roc(binned_v2_seeds_common.modified,
+			     binned_v2_seeds_common.prediction2, nrow(binned_v2_seeds_common))
+	local precisions2 = vcat([0], map(precision, rocs2), [1])
+	local recalls2 = vcat([1], map(recall, rocs2), [0])
+
+	local combined_pred = max.(binned_v2_seeds_common.prediction1, binned_v2_seeds_common.prediction2)
+
+	local rocs3 = roc(binned_v2_seeds_common.modified,
+			     	  combined_pred, nrow(binned_v2_seeds_common))
+	local precisions3 = vcat([0], map(precision, rocs3), [1])
+	local recalls3 = vcat([1], map(recall, rocs3), [0])
+
+	local df1 = DataFrame(precision = precisions1, recall = recalls1)
+	df1[:, :version] .= "1"
+	local df2 = DataFrame(precision = precisions2, recall = recalls2)
+	df2[:, :version] .= "2"
+	local df3 = DataFrame(precision = precisions3, recall = recalls3)
+	df3[:, :version] .= "combined"
+
+	local df = vcat(df1, df2, df3)
+
+	local p001_v1 = precision(roc(binned_v2_seeds_common.modified,
+			     binned_v2_seeds_common.prediction1 .>= -log10(0.01)))
+	local r001_v1 = recall(roc(binned_v2_seeds_common.modified,
+	    		  binned_v2_seeds_common.prediction1 .>= -log10(0.01)))
+
+	local p001_v2 = precision(roc(binned_v2_seeds_common.modified,
+			     binned_v2_seeds_common.prediction2 .>= -log10(0.01)))
+	local r001_v2 = recall(roc(binned_v2_seeds_common.modified,
+	    		  binned_v2_seeds_common.prediction2 .>= -log10(0.01)))
+
+	local p001_c = precision(roc(binned_v2_seeds_common.modified,
+			     combined_pred .>= -log10(0.01)))
+	local r001_c = recall(roc(binned_v2_seeds_common.modified,
+	    		  combined_pred .>= -log10(0.01)))
+
+	
+	(
+		data(df) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Lines)
+		+
+		data(DataFrame(precision = [p001_v1, p001_v2, p001_c], recall = [r001_v1, r001_v2, r001_c], version = ["1", "2", "combined"])) * mapping(:recall => "Recall", :precision => "Precision", color = :version) * visual(Scatter)
+	) |> draw(scales(Color = (; palette = [:black, COL_RNA002, :orange])); axis = (; aspect = 1))
 end
 
 # ╔═╡ 96a61659-2925-44ce-ae5a-a2e0c6f7b0f4
@@ -1259,6 +1876,7 @@ MultipleTesting = "f8716d33-7c4a-5097-896f-ce0ecbd3ef6b"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 AlgebraOfGraphics = "~0.10.2"
@@ -1276,7 +1894,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "2d72d72b0cd446ffe9f1ea0d8f6693826a99594b"
+project_hash = "a786c11c2705b9d1796617e8a363868fed273162"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2779,20 +3397,25 @@ version = "0.4.1"
 
 [[deps.Unitful]]
 deps = ["Dates", "LinearAlgebra", "Random"]
-git-tree-sha1 = "d2282232f8a4d71f79e85dc4dd45e5b12a6297fb"
+git-tree-sha1 = "c25751629f5baaa27fef307f96536db62e1d754e"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
-version = "1.23.1"
+version = "1.27.0"
 
     [deps.Unitful.extensions]
     ConstructionBaseUnitfulExt = "ConstructionBase"
     ForwardDiffExt = "ForwardDiff"
     InverseFunctionsUnitfulExt = "InverseFunctions"
+    LatexifyExt = ["Latexify", "LaTeXStrings"]
+    NaNMathExt = "NaNMath"
     PrintfExt = "Printf"
 
     [deps.Unitful.weakdeps]
     ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
     ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
     InverseFunctions = "3587e190-3f89-42d0-90ee-14403ec27112"
+    LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+    Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
+    NaNMath = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
     Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[deps.WeakRefStrings]]
@@ -2942,7 +3565,7 @@ uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.59.0+0"
 
 [[deps.oneTBB_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
+deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
 git-tree-sha1 = "d5a767a3bb77135a99e433afe0eb14cd7f6914c3"
 uuid = "1317d2d5-d96f-522e-a858-c73665f53c3e"
 version = "2022.0.0+0"
@@ -2991,10 +3614,47 @@ version = "3.6.0+0"
 # ╠═3ec16ac1-dbec-4ce9-af4d-a913bdc68222
 # ╠═cc423cb8-7e32-4b76-b3e6-9fab041f2d1e
 # ╠═a50423b1-d847-4429-9bb9-9d8a7523a459
+# ╠═a8dbf627-e757-4332-bad1-93b9c75dfc7b
+# ╠═909ef769-1977-4b79-98f3-3f294365cfa6
 # ╠═884239d8-5613-44bc-a14c-348b3e31d3c3
+# ╠═2c0771e0-f8b0-4d1d-ad1c-3c34110f3d8c
+# ╠═4768a745-a252-4a57-8a48-379456a2794e
+# ╠═b43a7b79-6521-4594-bc04-33b4f3004e3e
+# ╟─37c2bd12-0053-4d2d-821d-c696818daf5e
+# ╠═195cbfcf-a5be-427a-b06d-a0402dbd09ef
+# ╠═573a26d2-d2fe-468b-b568-cf339e1fa44f
+# ╠═7a2a429f-fea2-4066-9b34-0ae3b3e2445d
+# ╠═a4d42bec-c67c-48e7-a1c1-e1e667b0dab5
+# ╠═f0126310-f889-45bd-b7be-3ef904e1d966
+# ╠═9a3e5ee2-b08c-457c-b674-54d95a4ef568
+# ╠═8e21bf75-129d-4f23-b6bc-13be787400c0
+# ╠═fc7f2779-56eb-4a13-923f-7e5b395bad22
+# ╠═5860ba83-ef21-4762-be75-92c353250bd9
+# ╠═c41d1023-8bf1-4f9e-9f11-bdfc823011c6
+# ╠═6426a373-52af-4aa3-83e6-ac9ccdac4b10
+# ╠═68e0a3ff-8f16-4265-ba51-2d7de6a6609c
+# ╠═d69d49ef-0d20-43db-8426-f86244a2c355
+# ╠═a30fb438-2ed0-4fed-b467-6a6dc8fcbc41
+# ╠═13cc3c2a-b2ad-4390-aac8-19f4083ce04f
+# ╠═e0ad4e4d-b921-4653-8ecb-3235fbd3201a
+# ╠═3123f453-991a-40ac-b800-a516d8168aad
+# ╠═d443ff09-030c-4206-8ed2-9f167d86f39f
+# ╠═143f3c1d-1727-4d99-9a08-f86aa56e9d55
+# ╠═d870c60d-db34-4c64-a3f0-9d7bcc5c230b
+# ╠═a6ef0a3c-6e6d-4982-a4dd-3bf1c3279988
+# ╠═d5851864-3ab1-47b6-8698-3c40c93d82ba
+# ╠═25c7b7b9-7242-4ee2-8b3b-4b1f7f484920
+# ╠═364ff6ad-96c8-4a76-80cb-f1f2666e3b9b
+# ╠═8c629a0b-ec9c-40f0-9255-902f4d22036d
+# ╠═f73dc41a-8288-4b44-89b8-d8e806abbe56
+# ╠═6c44da09-4868-4a1a-beda-ff2a7df80bc6
+# ╠═fadb14fe-b07d-470a-ab91-12baedc77c8f
+# ╠═e743be52-9522-4fd5-b2f5-3719ab7f6894
 # ╠═866b5d33-c2a7-4400-845e-50575053be71
 # ╠═9193fd14-d45c-4534-a029-75ab8171ea40
 # ╠═7a74c048-770c-4782-9c19-ab800f66b7e1
+# ╠═539fbed9-b5ba-4e91-addc-fbfb5d617563
+# ╠═6f43d818-7f29-4ea8-aa26-ac72be12b873
 # ╠═96a61659-2925-44ce-ae5a-a2e0c6f7b0f4
 # ╠═9054c2f0-7050-4bb9-bd10-da57ec7fa69c
 # ╠═9b8efe40-93b3-4dc9-8a01-ac06eae5024e

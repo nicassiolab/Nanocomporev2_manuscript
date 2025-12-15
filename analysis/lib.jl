@@ -6,6 +6,7 @@ Pkg.add("MLBase")
 Pkg.add("CairoMakie")
 Pkg.add("StatsBase")
 Pkg.add("Unitful")
+Pkg.add("Peaks")
 
 
 using DataFrames
@@ -16,6 +17,7 @@ using Random
 using StatsBase
 using Unitful
 using Printf
+using Peaks
 
 
 BIN_SIZE = 9
@@ -116,33 +118,35 @@ function bin(df, bin_size = BIN_SIZE)
 end
 
 
-function sharkfin(ax, df, col, lor_col; markersize = 7)
+function sharkfin(ax, df, col, lor_col; markersize=7, rasterize=false)
 	mods = df[!, "modified"] .== 1
 	# nomods = .! mods
-	# scatter!(ax, abs.(df[nomods, lor_col]), df[nomods, col], color="#DDDDDD", alpha = 1, markersize = markersize)
-	# scatter!(ax, abs.(df[mods, lor_col]), df[mods, col], color="#2E2585", alpha = 0.8, markersize = markersize)
+	# scatter!(ax, abs.(df[nomods, lor_col]), df[nomods, col], color="#DDDDDD", alpha=1, markersize=markersize)
+	# scatter!(ax, abs.(df[mods, lor_col]), df[mods, col], color="#2E2585", alpha=0.8, markersize=markersize)
 	color = ifelse.(mods, "#2E2585", "#DDDDDD")
-	scatter!(ax, abs.(df[:, lor_col]), df[:, col], color=color, alpha = 0.8, markersize = markersize)
+	scatter!(ax, abs.(df[:, lor_col]), df[:, col], color=color, alpha=0.8, markersize=markersize, rasterize=rasterize)
 	ax.xlabel = "|LOR|"
 	ax.ylabel = "-log₁₀(q-value)"
 end
 
 
-function corr_plot(ax, df, xlabel, ylabel; markersize = 7)
+function corr_plot(ax, df, xlabel, ylabel; markersize=7, rasterize=false)
 	mods = df[!, "modified"] .== 1
 	nomods = .! mods
 	scatter!(ax,
-			  df[nomods, "predicted"],
-			  df[nomods, "predicted_1"],
-			  color="#DDDDDD",
-			  alpha = 1,
-			  markersize = markersize)
+		     df[nomods, "predicted"],
+			 df[nomods, "predicted_1"],
+			 color="#DDDDDD",
+			 alpha=1,
+			 markersize=markersize,
+			 rasterize=rasterize)
 	scatter!(ax,
-			  df[mods, "predicted"],
-			  df[mods, "predicted_1"],
-			  color="#2E2585",
-			  alpha = 0.8,
-			  markersize = markersize)
+			 df[mods, "predicted"],
+			 df[mods, "predicted_1"],
+			 color="#2E2585",
+			 alpha=0.8,
+			 markersize=markersize,
+			 rasterize=rasterize)
 	ax.xlabel = xlabel
 	ax.ylabel = ylabel
 end
@@ -216,4 +220,17 @@ end
 
 function auprc(scores::AbstractArray{Float64}, classes::AbstractArray{Bool}, pos_labels::Set{Int64})
 	auprc(scores, Int.(classes), pos_labels)
+end
+
+function peaks(df, radius)
+	all_positions = DataFrames.combine(groupby(df, :ref_id),
+									   :pos => (p -> 1:maximum(p)) => :pos)
+	all_positions = leftjoin(all_positions, df,
+			 				 on = [:ref_id, :pos])
+	all_positions = sort(all_positions, [:ref_id, :pos])
+
+	peaks = DataFrames.combine(groupby(all_positions, :ref_id),
+				   	 	       :predicted_raw => (p -> argmaxima(p, radius, strict = false)) => :pos)
+	sort(leftjoin(peaks, df, on = [:ref_id, :pos]),
+		 [:ref_id, :pos])
 end

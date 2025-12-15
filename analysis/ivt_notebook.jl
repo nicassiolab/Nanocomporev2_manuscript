@@ -9205,7 +9205,7 @@ begin
 
 
 	local df = copy(comods)#[1:100, :]
-	df[!, :significant] = df.qvalue .< 0.01
+	df[!, :significant] = df.qvalue .< 0.05
 	local plt = data(df) *
 		mapping(:phi, :pvalue => (p -> -log10(p)), color = :significant) *
 		visual(Scatter; markersize = 5)
@@ -9554,8 +9554,8 @@ begin
 	# 	   framevisible = false)
 
 
-	for (label, layout) in zip(["A", "B", "C", "D"],
-							   [trow[1, 1], brow[1, 1], trow[1, 2], brow[1, 2]])
+	for (label, layout) in zip(["A", "B", "C", "D", "E"],
+							   [trow[1, 1], brow[1, 1], trow[1, 2], brow[1, 2], brow[2, 4]])
 	    Label(layout[1, 1, TopLeft()], label,
 	        fontsize = 26,
 	        font = :bold,
@@ -11681,9 +11681,17 @@ begin
 	df
 end
 
+# ╔═╡ 7ef78147-f3a9-4a73-a179-6d9b302629dd
+md"""
+## Percentage of detected mods with an association
+"""
+
 # ╔═╡ 7e5f1c7b-1957-453c-8aaa-90719e9ff215
 vcat(map(tuple, sig_comods.reference, sig_comods.pos1),
 	 map(tuple, sig_comods.reference, sig_comods.pos2)) |> Set |> length
+
+# ╔═╡ a7269b72-6398-4016-ab2d-28cb6a024431
+14129/nrow(sig_peaks_ivt)
 
 # ╔═╡ fff284bb-8469-4441-ba77-f20bb296fc79
 10630 / nrow(sig_peaks_ivt)
@@ -12307,7 +12315,9 @@ end
 # ╠═faa56f3f-6891-423c-89e3-95099dcc149c
 # ╠═5efd1815-277b-4444-803d-b48336b0abd7
 # ╠═da76c242-e945-4336-9aa9-f2aa267fb975
+# ╠═7ef78147-f3a9-4a73-a179-6d9b302629dd
 # ╠═7e5f1c7b-1957-453c-8aaa-90719e9ff215
+# ╠═a7269b72-6398-4016-ab2d-28cb6a024431
 # ╠═fff284bb-8469-4441-ba77-f20bb296fc79
 # ╠═a03581d9-edf1-4932-9029-5336baa4b1d6
 # ╠═ede4a4d6-206b-4f24-9485-417c2fa982cc
