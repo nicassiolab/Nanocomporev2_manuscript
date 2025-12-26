@@ -137,8 +137,124 @@ function plot_gene_comods(sig_comods, gtf, gene; axis = nothing, colormap = :sea
 	end
 end
 
-function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), focus = nothing, rename = nothing)
+function plot_gene_comods_elliptical_arcs(sig_comods, gtf, gene; axis = nothing, colormap = :seaborn_crest_gradient, colorrange = (0, 100), highclip = :darkblue, min_w = 2, max_w = 8, xlimits = nothing, minheight=missing, maxheight=missing, dotsize=10, fig=nothing, legend=true, fontsize=14)
+	pairs = copy(sig_comods[occursin.(gene, sig_comods.reference), :])
+	exons = gtf[gtf.feature .== "exon" .&& occursin.(gene, gtf.attribute), :]
+	cds = gtf[gtf.feature .== "CDS" .&& occursin.(gene, gtf.attribute), :]
+
+
+	shift = minimum(exons.start)
+	# minx = minimum(exons.start)
+	minx = 0
+	maxx = maximum(exons.end) - shift
+
+	if isnothing(axis)
+		fig = Figure(size = (1200, 600))
+		ax = Axis(fig[1, 1])
+	else
+		ax = axis
+	end
+
+	ticks = round.(range(minx, maxx; length = 4); digits = 0)
+	ax.xticks = (ticks, [format_with_commas(Int(t)) for t in ticks .+ shift])
+
+	chr = pairs[1, :chr]
+	# text!(ax, -(maxx-minx)/30, 0; text = chr, align = (:right, :center))
+	ax.xlabel = chr
+	ax.xlabelsize = LABELSIZE
+
+	lines!(ax, [minx, maxx], [0, 0], color = :black, linewidth = 1)
+	scatter!(ax, range(minx, maxx; length = 40), zeros(40);
+			 marker = pairs[1, :strand] == "+" ? :rtriangle : :ltriangle,
+			 color = :black)
+
+	for exon in eachrow(exons)
+		lines!(ax, [exon.start - shift, exon.end - shift], [0, 0], color = :black, linewidth = 10)
+	end
+	for region in eachrow(cds)
+		lines!(ax, [region.start - shift, region.end - shift], [0, 0], color = :black, linewidth = 20)
+	end
+
+	pairs[!, :neglogp] = -log10.(pairs.fisher_pvalue)
+	# tx_data[‘neglogp’] = -np.log10(tx_data[‘p_value’])
+    # min_w, max_w = 0.5, 6
+    # w_norm = (pairs.neglogp .- minimum(pairs.neglogp)) ./
+                 # (maximum(pairs.neglogp) - minimum(pairs.neglogp) + 1e-9)
+	w_norm = pairs.phi
+	pairs[!, :linewidth] = min_w .+ (max_w - min_w) .* w_norm
+
+	pairs = renamemods(pairs)
+
+	mods1 = pairs[:, [:genomicPos1, :mod1]]
+	rename!(mods1, [:pos, :mod])
+	mods2 = pairs[:, [:genomicPos2, :mod2]]
+	rename!(mods2, [:pos, :mod])
+	mods = vcat(mods1, mods2)
+	mods[!, :y] .= 0
+
+	# scatter!(ax, mods.pos, zeros(nrow(mods)), color=coalesce.(mods.mod, "missing"))
+
+	previous_pos = chr == "+" ? 0 : Inf
+	close_num = 0
+	for (i, pair) in enumerate(eachrow(pairs))
+		alpha = 0.25 + (1 - 0.25) * abs(pair.phi)
+		left = min(pair.genomicPos1, pair.genomicPos2) - shift
+		right = max(pair.genomicPos1, pair.genomicPos2) - shift
+		distance = right - left
+		radius = distance/2
+		
+		center = left + radius
+		orientation = sign(pair.phi)
+
+		h = ismissing(minheight) ? radius : max(minheight, radius)
+		h = ismissing(maxheight) ? h : min(h, maxheight)
+		current_pos = chr == "+" ? left : right
+		if abs(previous_pos - current_pos) > (maxx - minx)/10
+			previous_pos = current_pos
+			close_num = 0
+		else
+			close_num += 1
+		end
+		h += close_num*coalesce(maxheight/10, 100)
+
+		t = range(0, orientation*π, 100)
+		x = radius * cos.(t)
+		y = minimum(h) * sin.(t) .+ orientation .* 5
+		lines!(ax, center.+x, y,
+			   color = pair.neglogp, #pair.phi,
+			   # linewidth = pair.linewidth,
+			   linewidth = 2,
+			   # alpha = alpha,
+			   colormap = colormap,
+			   colorrange = colorrange,#(minimum(pairs.phi), maximum(pairs.phi)),
+			   highclip = highclip)
+		
+	end
+
+	local dots = data(mods) *
+		mapping(:pos => (p -> p - shift), :y, color=:mod => "Modification", marker=:mod => "Modification") *
+		visual(Scatter; markersize=dotsize)
+	local grid = draw!(ax, dots)
+	if legend && !isnothing(fig)
+		legend!(fig[1, 1], grid; tellheight=false, tellwidth=false, halign=:center, valign=:bottom, orientation=:horizontal, framevisible=false, labelsize=fontsize, titlesize=fontsize)
+	end
+
+	hideydecorations!(ax)
+
+	if !isnothing(xlimits)
+		xlims!(ax, xlimits)
+	end
+
+	if isnothing(axis)
+		fig
+	else
+		axis
+	end
+end
+
+function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), focus = nothing, rename = nothing, fontsize=12, lpadding=0)
 	exons = gtf[occursin.(gene, gtf.attribute) .&& occursin.("transcript_type \"protein_coding\"", gtf.attribute) .&& gtf.feature .== "exon", :]
+	cdses = gtf[occursin.(gene, gtf.attribute) .&& occursin.("transcript_type \"protein_coding\"", gtf.attribute) .&& gtf.feature .== "CDS", :]
 	refs = exons.transcript_id |> unique |> collect |> sort
 	if !isnothing(transcripts)
 		refs = transcripts |> unique |> collect |> sort
@@ -150,17 +266,24 @@ function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), 
 	# refs = filter(r -> occursin(gene, r), keys(gtf.attribute)) |> unique |> collect |> sort)
 	N = length(refs)
 	i = length(refs) - 1
+	max_label_len = 0
 	for ref in refs
 		ref_exons = exons[exons.transcript_id .== ref, :]
+		ref_cdses = cdses[cdses.transcript_id .== ref, :]
 		color = get(colors, ref, :black)
 		for exon in eachrow(ref_exons)
-			lines!(ax, [exon.start, exon.end], [i, i], linewidth = 16, color = color)
+			lines!(ax, [exon.start, exon.end], [i, i], linewidth = 12, color = color)
+		end
+		for cds in eachrow(ref_cdses)
+			lines!(ax, [cds.start, cds.end], [i, i], linewidth = 20, color = color)
 		end
 		lines!(ax, [minimum(ref_exons.start), maximum(ref_exons.end)], [i, i], linewidth = 1, color = color)
-		text!(ax, leftmost - distance * 0.02, i; text = isnothing(rename) ? ref : get(rename, ref, ref), align = (:right, :center))
+		label = isnothing(rename) ? ref : get(rename, ref, ref)
+		text!(ax, leftmost - distance * 0.02, i; text = label, align = (:right, :center), fontsize=fontsize)
+		max_label_len = max(max_label_len, length(label))
 
 		scatter!(ax, range(leftmost, rightmost; length = 40), repeat([i], 40);
-			 marker = gtf[1, :strand] == "+" ? :rtriangle : :ltriangle,
+			 marker = exons[1, :strand] == "+" ? :rtriangle : :ltriangle,
 			 color = color)
 		
 		i -= 1
@@ -168,12 +291,11 @@ function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), 
 
 	if !isnothing(focus)
 		(left, right) = focus
-		poly!(Point2f[(left, N+0.5), (right, N+0.5), (right, -0.5), (left, -0.5)], strokecolor = :red, strokewidth = 2)
-
+		poly!(Point2f[(left, N-1+0.45), (right, N-1+0.45), (right, -0.45), (left, -0.45)], strokecolor = :red, strokewidth = 2, color=("#F0F0F0", 0.25))
 	end
 	
 	ylims!(ax, -0.5, length(refs) - 0.5)
-	xlims!(ax, low = leftmost - distance * 0.15)
+	xlims!(ax, low=leftmost - distance * 0.02 - lpadding, high=rightmost)
 	ax.xlabel = exons[1, :chr]
 	ax.xlabelsize = LABELSIZE
 	hidespines!(ax)
@@ -181,7 +303,7 @@ function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), 
 	hideydecorations!(ax)
 end
 
-function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, colorrange=nothing, title=nothing, highlight=nothing, spinecolor = :black, ticks = 5)
+function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, colorrange=nothing, title=nothing, highlight=nothing, spinecolor = :black, ticks = 5, sequence=missing, mod_symbols=Dict(), mod_colors=Dict())
 	df = copy(df)
 	allmods = copy(allmods)
 	minpos = min(minimum(df.genomicPos1), minimum(df.genomicPos2))
@@ -222,22 +344,22 @@ function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, 
 
 	local mods = Dict()
 	for row in eachrow(df)
-		if row.genomicPos1 ∉ keys(mods) || mods[row.genomicPos1] === missing
-			mods[row.genomicPos1] = row.mod1
+		if row.genomicPos1 ∉ keys(mods) || mods[row.genomicPos1] == "?"
+			mods[row.genomicPos1] = row.mod1 === missing ? "?" : row.mod1
 		end
 		if row.genomicPos2 ∉ keys(mods) || mods[row.genomicPos2] === missing
-			mods[row.genomicPos2] = row.mod2
+			mods[row.genomicPos2] = row.mod2 === missing ? "?" : row.mod2
 		end
 	end
 	if range !== nothing
 		allmods = allmods[between.(allmods.pos, range[1], range[2]), :]
 		df = df[between.(df.pos1, range[1], range[2]) .&& between.(df.pos2, range[1], range[2]), :]
 	end
-	for row in eachrow(allmods)
-		if row.genomicPos ∉ keys(mods) || mods[row.genomicPos] === missing
-			mods[row.genomicPos] = "?"
-		end
-	end
+	# for row in eachrow(allmods)
+	# 	if row.genomicPos ∉ keys(mods) || mods[row.genomicPos] === missing
+	# 		mods[row.genomicPos] = "?"
+	# 	end
+	# end
 
 	max_radius = maximum(abs.(df.genomicPos2 .- df.genomicPos1))/2
 	arc_offset = log10(max_radius)
@@ -289,19 +411,46 @@ function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, 
 	highlight_mask = [x in highlighted_gpos for x in keys(mods)]
 	mod_labels = ifelse.(values(mods) .=== missing, "?", values(mods))
 
-	text!(ax,
-		  [Point2f(x, 0) for x in collect(keys(mods))[.! highlight_mask]];
-		  text = mod_labels[.! highlight_mask],
-		  align = (:center, :center),
-		  fontsize=12)
-
-	text!(ax,
-		  [Point2f(x, 0) for x in collect(keys(mods))[highlight_mask]];
-		  text = collect(values(mods))[highlight_mask],
-		  font = :bold,
-		  align = (:center, :center),
-		  fontsize=14)
+	if sequence !== missing
+		for (pos, letter) in zip(grange[1]:grange[2], sequence)
+			mod = get(mods, pos - minpos, nothing)
+			if !isnothing(mod)
+				println(mod_symbols, " ", mod)
+				println(mod_colors, " ", mod)
+				marker = get(mod_symbols, mod, :circle)
+				color = get(mod_colors, mod, :black)
+				scatter!(ax, [pos - minpos], [0], marker=marker, color=color, markersize=16)
+			else
+				text!(ax, [Point2f(pos - minpos, 0)]; text=string(letter), align=(:center, :center), fontsize=12)
+			end
+			
+		end
+	else
+		text!(ax,
+			  [Point2f(x, 0) for x in collect(keys(mods))[.! highlight_mask]];
+			  text = mod_labels[.! highlight_mask],
+			  align = (:center, :center),
+			  fontsize=12)
+		
+		text!(ax,
+			  [Point2f(x, 0) for x in collect(keys(mods))[highlight_mask]];
+			  text = collect(values(mods))[highlight_mask],
+			  font = :bold,
+			  align = (:center, :center),
+			  fontsize=14)
+	end
 	
+	
+	# Colorbar(f[1:2, 2], limits = colorrange, colormap = :viridis,
+    # vertical = true, label = "-log₁₀(q-value)")
+
+	# Legend(f[2, 1],
+	# 	   [LineElement(points = [Point2f(cos(x)/2+0.3, sin(x)) for x in 0:0.1:π]),
+	# 		LineElement(points = [Point2f(cos(x)/2+0.3, sin(x) + 1) for x in 0:-0.1:-π])],
+	#        ["Positive", "Negative"],
+	# 	   orientation = :horizontal,
+	# 	   framevisible = false)
+
 	hideydecorations!(ax)
 	hidexdecorations!(ax, label = false, ticklabels = false, ticks = false)
 	
@@ -311,7 +460,7 @@ end
 function renamemods(df)
 	t = copy(df)
 	local mapping = Dict(
-		missing => missing,
+		missing => "Unknown",
 		# "m6A" => "ₘ⁶A",
 		# "m1A" => "ₘ¹A",
 		# "m7G" => "ₘ⁷G",
@@ -327,6 +476,8 @@ function renamemods(df)
 	t[!, :mod2] = map(m -> get!(mapping, m, m), t.mod2)
 	t
 end
+
+
 
 function contingency(a, b)::Matrix{Integer}
     [sum(a .== 0 .&& b .== 0) sum(a .== 0 .&& b .== 1)
@@ -616,10 +767,17 @@ df[!, :log10_distance] = log10.(abs.(df.pos1 .- df.pos2))
 df[!, :log10_distance_bin] = round.(df.log10_distance ./ 0.5; digits=0)
 labels_per_bin = 5
 labeled = combine(groupby(df, [:log10_distance_bin]),
-				  df -> vcat(sort(df[df.phi .>= 0, :], :phi, by=abs, rev=true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :],
-							 sort(df[df.phi .< 0, :], :phi, by=abs, rev=true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :]))
-srsf2 = df[df.gene .== "SRSF2", :]
-labeled = vcat(labeled, srsf2[argmax(srsf2.phi):argmax(srsf2.phi), :])
+				  df -> vcat(sort(df[df.phi .>= 0, :], :phi, by=abs, rev=true)[1:(df[1, :log10_distance_bin] == 2 ? 0 : labels_per_bin), :],
+							 sort(df[df.phi .< 0, :], :phi, by=abs, rev=true)[1:(df[1, :log10_distance_bin] == 2 ? labels_per_bin : labels_per_bin), :]))
+# srsf2 = df[df.gene .== "SRSF2", :]
+# labeled = vcat(labeled, srsf2[argmax(srsf2.phi):argmax(srsf2.phi), :])
+
+high_significance = df[df.pvalue .< 1e-100 .&&
+					   (.! (df.log10_distance_bin .<= 2 .&&
+						    df.phi .> 0 .&&
+						    df.phi .< 0.6)), :]
+labeled = unique(vcat(labeled, high_significance))
+
 cancer_geneset = Set(cancer_genes.Hugo_Symbol)
 labeled[!, :cancer] = [gene in cancer_geneset for gene in labeled.gene]
 
@@ -664,10 +822,31 @@ xlims!(ax, -1.2, 1.55)
 ax = Axis(trow[1, 2])
 
 # Plot SRSF2
-plot_gene_comods(sig_comods, gtf, "ENST00000359995.10"; axis=ax, colormap=:seaborn_crest_gradient, highclip=:black)
-text!(ax, 1600, -60; text="SRSF2", align=(:center, :top))
-Colorbar(trow[1, 3], limits=[0, 100], colormap=:seaborn_crest_gradient, #:viridis,
-vertical=true, label="-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", labelsize=LABELSIZE, labelpadding=LABELPAD)
+# plot_gene_comods(sig_comods, gtf, "ENST00000359995.10"; axis=ax, colormap=:seaborn_crest_gradient, highclip=:black)
+# text!(ax, 1600, -60; text="SRSF2", align=(:center, :top))
+# Colorbar(trow[1, 3], limits=[0, 100], colormap=:seaborn_crest_gradient, #:viridis,
+# vertical=true, label="-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", labelsize=LABELSIZE, labelpadding=LABELPAD)
+
+plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; minheight = 5, maxheight = 150, dotsize=15, xlimits=(1170, 1820), legend=true, colormap = :seaborn_crest_gradient, highclip=:darkblue, fig=trow[1, 2], axis = ax, fontsize=20) # RPL22
+ylims!(ax, -150, 150)
+text!(ax, 0, -30; text = "RPL22", align = (:left, :top))
+text!(ax, 1720, 130; text = "↑ Co-occurring", align = (:left, :top))
+text!(ax, 1720, -130; text = "↓ Mutually exclusive", align = (:left, :bottom))
+
+inset_ax = Axis(trow[1, 2],
+			    width=Relative(0.5),
+				height=Relative(0.2),
+				halign=0.05,
+				valign=0.95)
+hidedecorations!(inset_ax)
+tx = "ENST00000234875.9"
+name = "RPL22"
+gene_start = minimum(gtf[gtf.transcript_id .== tx, :start])
+
+plot_isoforms_model!(inset_ax, "RPL22"; transcripts = Set([tx]), colors = Dict([tx => :black]), rename = Dict([tx => name]), focus=(gene_start+1170, gene_start+1820), fontsize=16, lpadding=2000)
+
+Colorbar(trow[1, 3], limits = [0, 100], colormap = :seaborn_crest_gradient, vertical = true, label = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", labelsize = LABELSIZE, labelpadding = LABELPAD)
+
 
 
 # PLOT D
@@ -684,35 +863,80 @@ tx2 = split(row2.reference, "|")[1]
 name1 = split(row1.reference, "|")[5]
 name2 = split(row2.reference, "|")[5]
 
-plot_isoforms_model!(ax, "MDH"; transcripts=Set([tx1, tx2]), colors=Dict([tx1 => :blue, tx2 => :orange]), focus=(gpos1-100, gpos2+100), rename=Dict([tx1 => name1, tx2 => name2]))
+blue = "#00aaff"
+
+plot_isoforms_model!(ax, "MDH"; transcripts=Set([tx1, tx2]), colors=Dict([tx1 => blue, tx2 => :orange]), focus=(gpos1-100, gpos2+100), rename=Dict([tx1 => name1, tx2 => name2]), lpadding=1650)
 
 tx1_mask = occursin.(tx1, an_sig_comods.reference)
 tx2_mask = occursin.(tx2, an_sig_comods.reference)
 colorrange = (0, 100)
+seq = tx_ref[row1.reference][(row1.pos1-10):(row1.pos2+10)]
+mod_symbols = Dict(["m⁵C" => :utriangle,
+					"m⁶A" => :cross,
+					"Unknown" => :circle,
+					"Ψ" => :rect])
+mod_colors = Dict(["m⁵C" => "#e69f00",
+				   "m⁶A" => "#009e73",
+				   "Unknown" => "#0072b2",
+				   "Ψ" => "#cc79a7"])
 ax1, max_radius1 = arc_plot_genomic2(brow[2, 2],
 				  					 renamemods(an_sig_comods[tx1_mask, :]),
 				  					 an_sig_peaks_ivt[occursin.(tx1, an_sig_peaks_ivt.ref_id), :];
 				  					 range=(row1.pos1-2000, row1.pos2+2000),
-				  					 grange=(gpos1-20, gpos2+20),
+				  					 grange=(gpos1-10, gpos2+10),
 				  					 colorrange=colorrange,
 				  					 title=name1,
 				  					 highlight=(row1.pos1, row1.pos2),
-				  					 spinecolor=:blue,
-				  					 ticks=3)
-text!(ax1, 2, 8; text="Co-occurring", align=(:left, :top))
-text!(ax1, 2, -8; text="Mutually exclusive", align=(:left, :bottom))
+				  					 spinecolor=blue,
+				  					 ticks=3,
+									 sequence=seq,
+									 mod_symbols=mod_symbols,
+									 mod_colors=mod_colors)
+text!(ax1, 1, 13; text="↑ Co-occurring", align=(:left, :top))
+text!(ax1, 1, -13; text="↓ Mutually exclusive", align=(:left, :bottom))
+Legend(brow[2, 2],
+    	   [MarkerElement(marker=mod_symbols["Unknown"], markersize=16, color=mod_colors["Unknown"]),
+	 		MarkerElement(marker=mod_symbols["m⁵C"], markersize=16, color=mod_colors["m⁵C"])],
+    	   ["Unknown", "m⁵C"],
+		   "Modification";
+		   tellheight=false,
+		   tellwidth=false,
+		   halign=:right,
+		   valign=:bottom,
+		   orientation=:horizontal,
+		   framevisible=false,
+		   titlegap=2,
+		   colgap=4,
+		   patchlabelgap=2)
 ax2, max_radius2 = arc_plot_genomic2(brow[3, 2],
 				  				     renamemods(an_sig_comods[tx2_mask, :]),
 				  				     an_sig_peaks_ivt[occursin.(tx2, an_sig_peaks_ivt.ref_id), :];
 				  				     range=(row2.pos1-2000, row2.pos2+2000),
-				  				     grange=(gpos1-20, gpos2+20),
+				  				     grange=(gpos1-10, gpos2+10),
 				  				     colorrange=colorrange,
 				  				     title=name2,
 				  				     highlight=(row2.pos1, row2.pos2),
 				  				     spinecolor=:orange,
-				  				     ticks=3)
-text!(ax2, 2, 8; text="Co-occurring", align=(:left, :top))
-text!(ax2, 2, -8; text="Mutually exclusive", align=(:left, :bottom))
+				  				     ticks=3,
+									 sequence=seq,
+									 mod_symbols=mod_symbols,
+									 mod_colors=mod_colors)
+text!(ax2, 1, 13; text="↑ Co-occurring", align=(:left, :top))
+text!(ax2, 1, -13; text="↓ Mutually exclusive", align=(:left, :bottom))
+Legend(brow[3, 2],
+    	   [MarkerElement(marker=mod_symbols["Unknown"], markersize=16, color=mod_colors["Unknown"]),
+	 		MarkerElement(marker=mod_symbols["m⁵C"], markersize=16, color=mod_colors["m⁵C"])],
+    	   ["Unknown", "m⁵C"],
+		   "Modification";
+		   tellheight=false,
+		   tellwidth=false,
+		   halign=:right,
+		   valign=:bottom,
+		   orientation=:horizontal,
+		   framevisible=false,
+		   titlegap=2,
+		   colgap=4,
+		   patchlabelgap=2)
 max_radius = max(max_radius1, max_radius2) * 2
 ylims!(ax1, -max_radius, max_radius)
 ylims!(ax2, -max_radius, max_radius)
@@ -756,7 +980,7 @@ df = combine(groupby(df, [:tx, :pattern]), nrow => :count)
 barplt = data(df) *
 	mapping(:pattern, :count, dodge=:tx, color=:tx) *
 	visual(BarPlot; width=0.7, dodge_gap=0.15)
-draw!(top, barplt, scales(Color=(; palette=[:blue, :orange])))
+draw!(top, barplt, scales(Color=(; palette=[blue, :orange])))
 
 expected = DataFrame(tx=[name1, name1, name1, name1, name2, name2, name2, name2],
 				  	 pattern=["0-0", "0-1", "1-0", "1-1",
@@ -801,7 +1025,7 @@ rowsize!(grid, 1, Relative(5/6))
 rowsize!(grid, 2, Relative(1/6))
 
 Legend(grid[1, 1],
-	   [PolyElement(color=:blue),
+	   [PolyElement(color=blue),
 		PolyElement(color=:orange),
 		PolyElement(color=(:white, 0), strokecolor=:black, strokewidth=1.5)],
 	   [name1, name2, "Expected"],

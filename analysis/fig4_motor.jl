@@ -282,7 +282,8 @@ ax = Axis(fig[3, 1],
 		  titlesize=20,
 		  aspect=1,
 		  xlabel="Recall",
-		  ylabel="Precision")
+		  ylabel="Precision",
+		  limits=((0, 1), (0, 1)))
 plot_prc!(ax,
 		  peakannot_002.modified,
 		  peakannot_002.predicted,
@@ -306,7 +307,8 @@ ax = Axis(fig[3, 2],
 		  titlesize=20,
 		  aspect=1,
 		  xlabel="Recall",
-		  ylabel="Precision")
+		  ylabel="Precision",
+		  limits=((0, 1), (0, 1)))
 plot_prc!(ax,
 		  peakannot_004.modified,
 		  peakannot_004.predicted,
@@ -349,7 +351,11 @@ f = Figure(size = (900, 450))
 
 ax = Axis(f[1, 1],
 		  title="RNA002",
-		  aspect=1)
+		  aspect=1,
+		  xlabel="Recall",
+		  ylabel="Precision",
+		  xlabelsize=18,
+		  ylabelsize=18)
 plot_prc!(ax,
 	      peakannot_002_binned.modified,
 	      peakannot_002_binned.predicted,
@@ -370,7 +376,11 @@ axislegend(ax, "GMM test}")
 
 ax = Axis(f[1, 2],
 		  title="RNA004",
-		  aspect=1)
+		  aspect=1,
+		  xlabel="Recall",
+		  ylabel="Precision",
+		  xlabelsize=18,
+		  ylabelsize=18)
 plot_prc!(ax,
 	      peakannot_004_binned.modified,
 	      peakannot_004_binned.predicted,

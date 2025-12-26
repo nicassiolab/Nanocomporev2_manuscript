@@ -1876,7 +1876,6 @@ MultipleTesting = "f8716d33-7c4a-5097-896f-ce0ecbd3ef6b"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
-Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 AlgebraOfGraphics = "~0.10.2"
@@ -1894,7 +1893,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "a786c11c2705b9d1796617e8a363868fed273162"
+project_hash = "2d72d72b0cd446ffe9f1ea0d8f6693826a99594b"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]

@@ -1935,6 +1935,27 @@ renamemods = df -> begin
 	t
 end
 
+# ╔═╡ 31ef15f2-8cf6-4711-82b8-59f34d2e043e
+renamemods2 = df -> begin
+	t = copy(df)
+	local mapping = Dict(
+		missing => "Unknown",
+		# "m6A" => "ₘ⁶A",
+		# "m1A" => "ₘ¹A",
+		# "m7G" => "ₘ⁷G",
+		# "m5C" => "ₘ⁵C",
+		"m6A" => "m⁶A",
+		"m1A" => "m¹A",
+		"m7G" => "m⁷G",
+		"m5C" => "m⁵C",
+		"Y" => "Ψ",
+		"Nm" => "Nm"
+	)
+	t[!, :mod1] = map(m -> get!(mapping, m, m), t.mod1)
+	t[!, :mod2] = map(m -> get!(mapping, m, m), t.mod2)
+	t
+end
+
 # ╔═╡ 82a98275-f6d6-4ed1-9aa7-dd8ab59d9370
 #=╠═╡
 arc_plot_genomic(renamemods(simple_comods[occursin.("ENST00000264335.13", simple_comods.reference), :]), an_sig_peaks_ivt[occursin.("ENST00000264335.13", an_sig_peaks_ivt.ref_id), :]; range=(500, 1800), grange=(1344520, 1344980))
@@ -3021,7 +3042,7 @@ function format_with_commas(x)
 end
 
 # ╔═╡ 25e2f5f3-0612-48ea-83fc-3c4e85eb793d
-function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, colorrange=nothing, title=nothing, highlight=nothing, spinecolor = :black, ticks = 5)
+function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, colorrange=nothing, title=nothing, highlight=nothing, spinecolor = :black, ticks = 5, sequence=missing, mod_symbols=Dict(), mod_colors=Dict())
 	df = copy(df)
 	allmods = copy(allmods)
 	minpos = min(minimum(df.genomicPos1), minimum(df.genomicPos2))
@@ -3062,22 +3083,22 @@ function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, 
 
 	local mods = Dict()
 	for row in eachrow(df)
-		if row.genomicPos1 ∉ keys(mods) || mods[row.genomicPos1] === missing
-			mods[row.genomicPos1] = row.mod1
+		if row.genomicPos1 ∉ keys(mods) || mods[row.genomicPos1] == "?"
+			mods[row.genomicPos1] = row.mod1 === missing ? "?" : row.mod1
 		end
 		if row.genomicPos2 ∉ keys(mods) || mods[row.genomicPos2] === missing
-			mods[row.genomicPos2] = row.mod2
+			mods[row.genomicPos2] = row.mod2 === missing ? "?" : row.mod2
 		end
 	end
 	if range !== nothing
 		allmods = allmods[between.(allmods.pos, range[1], range[2]), :]
 		df = df[between.(df.pos1, range[1], range[2]) .&& between.(df.pos2, range[1], range[2]), :]
 	end
-	for row in eachrow(allmods)
-		if row.genomicPos ∉ keys(mods) || mods[row.genomicPos] === missing
-			mods[row.genomicPos] = "?"
-		end
-	end
+	# for row in eachrow(allmods)
+	# 	if row.genomicPos ∉ keys(mods) || mods[row.genomicPos] === missing
+	# 		mods[row.genomicPos] = "?"
+	# 	end
+	# end
 
 	max_radius = maximum(abs.(df.genomicPos2 .- df.genomicPos1))/2
 	arc_offset = log10(max_radius)
@@ -3129,18 +3150,34 @@ function arc_plot_genomic2(gridpos, df, allmods; range=nothing, grange=nothing, 
 	highlight_mask = [x in highlighted_gpos for x in keys(mods)]
 	mod_labels = ifelse.(values(mods) .=== missing, "?", values(mods))
 
-	text!(ax,
-		  [Point2f(x, 0) for x in collect(keys(mods))[.! highlight_mask]];
-		  text = mod_labels[.! highlight_mask],
-		  align = (:center, :center),
-		  fontsize=12)
-
-	text!(ax,
-		  [Point2f(x, 0) for x in collect(keys(mods))[highlight_mask]];
-		  text = collect(values(mods))[highlight_mask],
-		  font = :bold,
-		  align = (:center, :center),
-		  fontsize=14)
+	if sequence !== missing
+		for (pos, letter) in zip(grange[1]:grange[2], sequence)
+			mod = get(mods, pos - minpos, nothing)
+			if !isnothing(mod)
+				println(mod_symbols, " ", mod)
+				println(mod_colors, " ", mod)
+				marker = get(mod_symbols, mod, :circle)
+				color = get(mod_colors, mod, :black)
+				scatter!(ax, [pos - minpos], [0], marker=marker, color=color, markersize=16)
+			else
+				text!(ax, [Point2f(pos - minpos, 0)]; text=string(letter), align=(:center, :center), fontsize=12)
+			end
+			
+		end
+	else
+		text!(ax,
+			  [Point2f(x, 0) for x in collect(keys(mods))[.! highlight_mask]];
+			  text = mod_labels[.! highlight_mask],
+			  align = (:center, :center),
+			  fontsize=12)
+		
+		text!(ax,
+			  [Point2f(x, 0) for x in collect(keys(mods))[highlight_mask]];
+			  text = collect(values(mods))[highlight_mask],
+			  font = :bold,
+			  align = (:center, :center),
+			  fontsize=14)
+	end
 	
 	
 	# Colorbar(f[1:2, 2], limits = colorrange, colormap = :viridis,
@@ -6870,294 +6907,9 @@ an_sig_comods[an_sig_comods.genomicPos1 .=== 76066564 .&& an_sig_comods.genomicP
 # ╔═╡ de2c4249-900d-4fee-941d-5a865ba1b296
 an_sig_peaks_ivt[an_sig_peaks_ivt.genomicPos .== 76066564 .|| an_sig_peaks_ivt.genomicPos .== 76066573, :]
 
-# ╔═╡ 879eaae7-21a2-40e7-9c31-ab9603e4947b
-function contingency(a, b)::Matrix{Integer}
-    [sum(a .== 0 .&& b .== 0) sum(a .== 0 .&& b .== 1)
-     sum(a .== 1 .&& b .== 0) sum(a .== 1 .&& b .== 1)]
-end
-
-# ╔═╡ 6df047c1-f3a7-44ac-a444-f470e17d49a4
-contingency(Int.(comods.fisher_pvalue .< 0.05), Int.(comods.emp_pvalue .< 0.05))
-
-# ╔═╡ 3403dfc2-27fd-439d-875f-b981b946d603
-begin
-	local cont = contingency(Int.(comods.fisher_pvalue .< 0.05), Int.(comods.emp_pvalue .< 0.05))
-
-	
-	# (sum(cont[:, 1]), sum(cont[:, 2]), sum(cont[1, :]), sum(cont[2, :]))
-	local mcc = (cont[1, 1]*cont[2, 2] - cont[1, 2]*cont[2, 1])/prod(sqrt.(cont))
-end
-
-# ╔═╡ a88a543d-d11d-4941-b588-469b67a8f1cc
-contingency(Int.(ifelse.(comods.fisher_pvalue .!== missing, comods.fisher_pvalue, comods.pvalue) .< 0.01), Int.(comods.emp_pvalue .< 0.01))
-
-# ╔═╡ 0919f200-3984-4cab-9ac0-bf6e982ad566
-comods[occursin.("CDKN2A", comods.reference) .&& comods.genomicPos1 .== 21968192 .&& comods.genomicPos2 .== 21968114, :]
-
-# ╔═╡ 19894766-0820-47a2-9a0b-9dab37ca5daa
-maximum(ivt[occursin.("GNAS", ivt.ref_id), :genomicPos])
-
-# ╔═╡ faf85657-eb0e-4b9e-86db-74a3cc6b1c04
-an_sig_comods[occursin.("GNAS", an_sig_comods.reference), :]
-
-# ╔═╡ c107996c-abeb-423f-90a0-6aa5125df163
-an_sig_comods[an_sig_comods.genomicPos1 .== 58910358 .&& an_sig_comods.genomicPos2 .== 58910385, :]
-
-# ╔═╡ e2557d68-4418-4266-9e6b-adc99f5e5d9c
-sort(combine(groupby(an_sig_comods[occursin.("NOTCH3", an_sig_comods.reference), :], [:genomicPos1, :genomicPos2]), :phi => (phis -> maximum(phis) - minimum(phis)) => :phi_diff), :phi_diff, rev = true)
-
-# ╔═╡ 50e26ae2-bc4b-4324-88f7-8588276cc44a
-begin
-	gtf = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/gencode.v41.annotation.gtf", delim = '\t', comment = "#", header = [:chr, :source, :feature, :start, :end, :score, :strand, :frame, :attribute]))
-	gtf[!, :transcript_id] = map(a -> replace(split(split(a, "; ")[2], " ")[2], "\"" => ""), gtf.attribute)
-	gtf
-end
-
-# ╔═╡ 213085a9-e9de-4404-80de-a26b2566caa8
-gtf[occursin.("PRRC2B", gtf.attribute) .&& gtf.feature .== "exon", :]
-
-# ╔═╡ 4e8b6a0d-40bc-418c-8520-fa9365f43a85
-begin
-	local df = copy(an_sig_comods)
-	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
-	local selected = map(r -> r.pair in ["m6A-m7G", "m5C-m6A", "Y-m6A", "Y-m5C"], eachrow(df))
-	df = df[selected, :]
-	sort(combine(groupby(df, [:mod1, :mod2]), nrow => :count))
-end
-
-# ╔═╡ 0fc62ea4-35bd-410d-a0b9-2ad09140b327
-begin
-	local df = copy(an_sig_comods)
-	local nearfull_refs = filter(r -> r.pos_minimum <= 50, combine(groupby(ivt, :ref_id), :pos => minimum)).ref_id |> Set
-	df = df[in.(df.reference, Ref(nearfull_refs)), :]
-	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
-	local selected = map(r -> r.pair in ["m6A-m7G", "m5C-m6A", "Y-m6A", "Y-m5C"], eachrow(df))
-	df = df[selected, :]
-	df[!, :transcript_id] = map(r -> split(r, "|")[1], df.reference)
-	local ref = copy(gtf[gtf.feature .== "start_codon", [:transcript_id, :start, :end, :strand]])
-	ref[!, :start_codon] = ifelse.(ref.strand .== "+", ref.start, ref.end)
-	df = innerjoin(df, ref[:, [:transcript_id, :start_codon]], on = [:transcript_id], makeunique = true)
-	local ref = copy(gtf[gtf.feature .== "stop_codon", [:transcript_id, :start, :end, :strand]])
-	ref[!, :stop_codon] = ifelse.(ref.strand .== "+", ref.end, ref.start)
-	df = innerjoin(df, ref[:, [:transcript_id, :stop_codon]], on = [:transcript_id], makeunique = true)
-
-	# df = df[df.feature .!== missing, :]
-	# get_start = row -> row.strand == "+" ? row.start : row.end
-	# get_stop = row -> row.strand == "+" ? row.end : row.start
-
-	# local starts = Dict(map(r -> (r.transcript_id, get_start(r)), eachrow(gtf[gtf.feature .== "start_codon", :])))
-	# local stops = Dict(map(r -> (r.transcript_id, get_stop(r)), eachrow(gtf[gtf.feature .== "stop_codon", :])))
-
-	get_region = (row, pos) -> if row.strand == "+"
-		if pos < row.start_codon
-			:utr5
-		elseif pos >= row.start_codon && pos <= row.stop_codon
-			:cds
-		else
-			:utr3
-		end
-	else
-		if pos > row.start_codon
-			:utr5
-		elseif pos <= row.start_codon && pos >= row.stop_codon
-			:cds
-		else
-			:utr3
-		end
-	end
-
-	df[!, :region1] = map((row, pos) -> get_region(row, pos), eachrow(df), ifelse.(df.strand .== "+", df.genomicPos1, df.genomicPos2))
-	df[!, :region2] = map((row, pos) -> get_region(row, pos), eachrow(df), ifelse.(df.strand .== "+", df.genomicPos2, df.genomicPos1))
-
-	# sort(combine(groupby(df, [:region1, :region2]), nrow => :count), by = (r -> Dict(:utr5 => 1, :cds => 2, :utr3 => 3)[r]))
-	df = sort(combine(groupby(df, [:pair, :region1, :region2]), nrow => :count))
-
-
-	function get_matrix(df)
-		m = zeros(3, 3)
-		for (i, r1) in enumerate([:utr5, :cds, :utr3])
-			for (j, r2) in enumerate([:utr5, :cds, :utr3])
-				m[i, j] = sum(df[df.region1 .== r1 .&& df.region2 .== r2, :count])
-			end
-		end
-		m
-	end
-	local f = Figure(size = (1000, 250))
-	for (i, pair) in enumerate(unique(df.pair))
-		matrix = get_matrix(df[df.pair .== pair, :])
-		# matrix ./= sum(matrix)
-		ax = Axis(f[1, i],
-				  title = pair,
-				  xlabel = "Modification 1",
-				  ylabel = "Modification 2",
-				  xticks = (1:3, ["5' UTR", "CDS", "3' UTR"]),
-				  yticks = (1:3, ["5' UTR", "CDS", "3' UTR"]))
-		heatmap!(ax, matrix, colormap = :reds)
-	end
-	f
-end
-
-# ╔═╡ e266cb67-ce59-49e5-8ce3-5ca8e5128ded
-combine(groupby(filter(r -> r.mod1 !== missing && r.mod2 !== missing && r.mod1 != r.mod2 && r.mod1 in ["m6A", "m7G"] && r.mod2 in ["m6A", "m7G"], an_sig_comods), [:mod1, :mod2]), nrow => :count)
-
-# ╔═╡ 9e4877fe-5c7c-493d-aa24-a5d22fbde4fd
-gtf[gtf.feature .== "CDS", :]
-
-# ╔═╡ b5febe6e-e9b5-46b8-8e09-700e28abe37f
-gtf.feature |> unique
-
-# ╔═╡ 8334730d-6e9e-46f8-a797-0d4730df3ab4
-sum(combine(groupby(ivt, :ref_id), :pos => minimum).pos_minimum .< 50)
-
-# ╔═╡ 33a269c7-9271-4f58-ab63-1a0264cd1965
-data(sig_comods) *
-	mapping((:pos1, :pos2) => ((p1, p2) -> log10(abs(p1 - p2))) => "Distance (log-scale)", :phi => "← Mutually exclusive    φ    Co-occurring →         ") *
-	visual(Scatter; markersize = 4) |>
-	draw(; axis = (; title = "Effect size of modification pair association by distance",
-				   xticks = (map(log10, [(10:10:100)..., (200:100:1000)..., (2000:1000:10000)..., 11000, 12000]), ["10nt", repeat([""], 8)..., "100nt", repeat([""], 8)..., "1,000nt", repeat([""], 8)..., "10,000nt", "", ""]),
-				   limits = ((0.9, 4.2), (-1, 1))))
-
-# ╔═╡ a5392b4a-bf22-4936-8426-476e85ccd92e
-import LinearAlgebra
-
-# ╔═╡ 755f8682-9890-4edb-bd0e-7c02f8acb3b2
-(rand()-0.5)/10
-
-# ╔═╡ 1613721e-9aa9-4898-aeff-68e90cd2a6bb
-function place_labels_nonoverlapping(points, labels; offset=0.05, padding=0.01, width_factor = 0.05, height = 0.05, gene_offsets = Dict())
-    n = length(points)
-    label_positions = Vector{Point2f}(undef, n)
-
-    # Initial placement: offset from each point
-    for i in 1:n
-		final_offset = sign(points[i][1]) * get(gene_offsets, labels[i], offset)
-        label_positions[i] = points[i] .+ (final_offset, 0)# (rand()-0.5)/10)
-    end
-
-    # Function to compute label extents (simplified)
-    function compute_extents(pos, label)
-        # Approximate text width/height (adjust as needed)
-        width = width_factor * length(label)
-        Rect2f(pos[1] - width/2, pos[2] - height/2, width, height)
-    end
-
-	function intersects(a::Rect2f, b::Rect2f)
-	    a_min_x = a.origin[1]
-	    a_max_x = a.origin[1] + a.widths[1]
-	    a_min_y = a.origin[2]
-	    a_max_y = a.origin[2] + a.widths[2]
-	
-	    b_min_x = b.origin[1]
-	    b_max_x = b.origin[1] + b.widths[1]
-	    b_min_y = b.origin[2]
-	    b_max_y = b.origin[2] + b.widths[2]
-	
-	    return !(a_max_x < b_min_x || a_min_x > b_max_x ||
-	             a_max_y < b_min_y || a_min_y > b_max_y)
-	end
-
-    # Iteratively adjust positions to avoid overlap
-    for _ in 1:30  # Max iterations
-        for i in 1:n
-            ext_i = compute_extents(label_positions[i], labels[i])
-            for j in 1:n
-                if i == j
-                    continue
-                end
-                ext_j = compute_extents(label_positions[j], labels[j])
-                if intersects(ext_i, ext_j)
-                    # Move label i away from label j
-                    dir = LinearAlgebra.normalize(label_positions[i] - label_positions[j])
-                    label_positions[i] += dir * 0.02
-                end
-            end
-        end
-    end
-
-    return label_positions
-end
-
-# ╔═╡ 6b71f0e3-288b-490a-9ab8-aeef32021708
-begin
-
-	# Example usage
-	local points = rand(Point2f, 10)
-	local labels = ["Label $i" for i in 1:10]
-	
-	local fig = Figure()
-	local ax = Axis(fig[1, 1])
-	
-	scatter!(ax, points, color=:blue, markersize=15)
-	
-	local label_positions = place_labels_nonoverlapping(points, labels; offset=0.06, padding=0.05)
-	
-	for (p, lp, label) in zip(points, label_positions, labels)
-		xalign = (lp[1] > p[1] ? :left : :right)
-	    text!(ax, label, position=lp, align=(xalign, :center), color=:black)
-	    lines!(ax, [p, lp], color=:gray, linewidth=0.5)
-	end
-	
-	fig
-
-end
-
-# ╔═╡ ebeafdca-d72f-4f7e-88ae-93074150e041
-combine(groupby(an_sig_comods, :reference), (df -> df[1:min(5, size(df, 1)), :]))
-
-# ╔═╡ 5f9e87a6-e6b2-4a81-8f0a-0a5ba174b45c
-md"""
-# Final paper plot
-"""
-
-# ╔═╡ 854eef7a-e911-4f5b-8562-5bbd22e0c900
-LABELSIZE = 18
-
-# ╔═╡ d57a1fed-bd4a-485f-8aef-8cacfb7a294a
-function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), focus = nothing, rename = nothing)
-	exons = gtf[occursin.(gene, gtf.attribute) .&& occursin.("transcript_type \"protein_coding\"", gtf.attribute) .&& gtf.feature .== "exon", :]
-	refs = exons.transcript_id |> unique |> collect |> sort
-	if !isnothing(transcripts)
-		refs = transcripts |> unique |> collect |> sort
-	end
-	exons = exons[in.(exons.transcript_id, Ref(refs)), :]
-	leftmost = minimum(exons.start)
-	rightmost = maximum(exons.end)
-	distance = rightmost - leftmost
-	# refs = filter(r -> occursin(gene, r), keys(gtf.attribute)) |> unique |> collect |> sort)
-	N = length(refs)
-	i = length(refs) - 1
-	for ref in refs
-		ref_exons = exons[exons.transcript_id .== ref, :]
-		color = get(colors, ref, :black)
-		for exon in eachrow(ref_exons)
-			lines!(ax, [exon.start, exon.end], [i, i], linewidth = 16, color = color)
-		end
-		lines!(ax, [minimum(ref_exons.start), maximum(ref_exons.end)], [i, i], linewidth = 1, color = color)
-		text!(ax, leftmost - distance * 0.02, i; text = isnothing(rename) ? ref : get(rename, ref, ref), align = (:right, :center))
-
-		scatter!(ax, range(leftmost, rightmost; length = 40), repeat([i], 40);
-			 marker = gtf[1, :strand] == "+" ? :rtriangle : :ltriangle,
-			 color = color)
-		
-		i -= 1
-	end
-
-	if !isnothing(focus)
-		(left, right) = focus
-		poly!(Point2f[(left, N+0.5), (right, N+0.5), (right, -0.5), (left, -0.5)], strokecolor = :red, strokewidth = 2)
-
-	end
-	
-	ylims!(ax, -0.5, length(refs) - 0.5)
-	xlims!(ax, low = leftmost - distance * 0.15)
-	ax.xlabel = exons[1, :chr]
-	ax.xlabelsize = LABELSIZE
-	hidespines!(ax)
-	# hidexdecorations!(ax)
-	hideydecorations!(ax)
-end
-
 # ╔═╡ 8a95d8d5-daa6-4efc-92d5-35b363660dd7
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local f = Figure(size = (1200, 1450))
 	local ga = f[1, 1] = GridLayout()
@@ -7302,151 +7054,32 @@ begin
 	f
 	
 end
+  ╠═╡ =#
 
-# ╔═╡ eddcd4e1-1ae0-40bb-8d0a-751fdd416caf
-begin
-	local f = Figure(size = (1200, 1450))
-	local ga = f[1, 1] = GridLayout()
-	local gb = f[2, 1] = GridLayout()
-	local gc = f[3, 1] = GridLayout()
-
-
-	local df = renamemods(an_sig_comods)
-
-	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
-	df = df[in.(df.pair, Ref(Set(["m⁵C-m⁶A", "m⁵C-Ψ", "m⁶A-Ψ", "m⁶A-m⁷G"]))), :]
-	# df[!, :type] = map(assoc_type, df.residual00, df.residual01, df.residual10, df.residual11)
-	# df[!, :phi] .*= ifelse.(df.type .== :comod, 1, -1)
-	local plt = data(df) *
-		mapping(:phi => "φ", :pvalue => (p -> -log10(p)) => "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", col = :pair) *
-		visual(Scatter; markersize = 5)
-	draw!(ga[1, 1:2], plt)
-
-	local ax = Axis(gb[1, 1:2],
-				    height = 110)
-	plot_isoforms_model!(ax, "RPL34"; transcripts = Set(["ENST00000394665.5", "ENST00000502534.5"]), colors = Dict(["ENST00000394665.5" => :blue, "ENST00000502534.5" => :orange]), focus = (108625238-150, 108625248+200), rename = Dict(["ENST00000394665.5" => "RPL34-201", "ENST00000502534.5" => "RPL34-204"]))
-	
-	# local ax = Axis(gb[1, 1])
-	local tx1_mask = occursin.("ENST00000394665.5", an_sig_comods.reference)
-	local tx2_mask = occursin.("ENST00000502534.5", an_sig_comods.reference)
-	local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
-				  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
-	arc_plot_genomic2(gb[2, 1],
-					  renamemods(an_sig_comods[tx1_mask, :]),
-					  an_sig_peaks_ivt[occursin.("ENST00000394665.5", an_sig_peaks_ivt.ref_id), :];
-					  range=(512-50, 522+50),
-					  grange=(108625238-100, 108625248+100),
-					  colorrange=colorrange,
-					  title="RPL34-201",
-					  highlight=(0, 1000),
-					  spinecolor=:blue)
-	arc_plot_genomic2(gb[3, 1],
-					  renamemods(an_sig_comods[tx2_mask, :]),
-					  an_sig_peaks_ivt[occursin.("ENST00000502534.5", an_sig_peaks_ivt.ref_id), :];
-					  range=(421-100, 431+100),
-					  grange=(108625238-100, 108625248+100),
-					  colorrange=colorrange,
-					  title="RPL34-204",
-					  highlight=(0, 1000),
-					  spinecolor=:orange)
-	Colorbar(gb[2:3, 2], limits = colorrange, colormap = :viridis,
-    vertical = true, label = "-log₁₀(𝑃-value)")
-	
-
-	# local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", "ENST00000304494.10|ENSG00000147889.18|OTTHUMG00000019686.7|OTTHUMT00000051915.1|CDKN2A-201|CDKN2A|978|protein_coding|")
-	# # local f = Figure(size = (600, 600))
-	
-
-	# local df = DataFrame(Tables.table(probs[:, [1385, 1584]] .> 0.75))
-	# dropmissing!(df)
-	# local n2 = nrow(df)
-	# println(contingency(df.Column1, df.Column2))
-	# local ax1 = Axis(gc[1, 1],
-	# 				 title="YWHAE-201",
-	# 			     # aspect = 0.3,
-	# 			     yticks=(1:2, ["m⁶A", "m⁵C"]),
-	# 				 xticks=(0:(n2/10):n2, ["$x%" for x in 0:10:100]),
-	# 			     xlabel="")
-	# println("n2: $n2")
-	# println(reduce(*, map(sum, eachcol(df)) ./ nrow(df)) * nrow(df))
-	# println(sum(df.Column1 .== 1 .&& df.Column2 .== 1))
-	# heatmap!(ax1, Array(sort(df)), colormap=["#dbdbdb", :black])
-
-	# local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", "ENST00000571732.5|ENSG00000108953.17|OTTHUMG00000134316.7|OTTHUMT00000437356.1|YWHAE-208|YWHAE|1818|protein_coding|")
-	# # local f = Figure(size = (600, 600))
-
-	# local df = DataFrame(Tables.table(probs[:, [1416, 1615]] .> 0.75))
-	# dropmissing!(df)
-	# local n1 = nrow(df)
-	# local ax2 = Axis(gc[2, 1],
-	# 			 title="YWHAE-208",
-	# 			 # aspect = 0.3,
-	# 			 yticks=(1:2, ["m⁶A", "m⁵C"]),
-	# 			 xticks=(0:(n1/10):n1, ["$x%" for x in 0:10:100]),
-	# 			 xlabel="Reads")
-	# println("n1: $n1")
-	# println(reduce(*, map(sum, eachcol(df)) ./ nrow(df)) * nrow(df))
-	# println(sum(df.Column1 .== 1 .&& df.Column2 .== 1))
-	# heatmap!(ax2, Array(sort(df)), colormap=["#dbdbdb", :black])
-
-
-	
-	
-	# xlims!(ax1, (0, max(n1, n2)))
-	# xlims!(ax2, (0, max(n1, n2)))
-	
-
-	# colsize!(f.layout, 2, Relative(7/10))
-	# colsize!(f.layout, 3, Relative(1/10))
-	rowsize!(f.layout, 1, Relative(1.8/7))
-	rowsize!(f.layout, 2, Relative(3.9/7))
-	rowsize!(f.layout, 3, Relative(1.3/7))
-
-	rowsize!(gb, 2, Relative(2/5))
-	rowsize!(gb, 3, Relative(2/5))
-
-	# Legend(ga[2, 1:2],
-	# 	   [PolyElement(color=Makie.wong_colors()[1]),
-	# 	    PolyElement(color=Makie.wong_colors()[2])],
-	#        ["Negative association", "Positive association"],
-	# 	   orientation = :horizontal,
-	# 	   framevisible = false)
-	Legend(gb[4, 1],
-		   [LineElement(points = [Point2f(cos(x)/2+0.3, sin(x) + 1) for x in 0:-0.1:-π]),
-			LineElement(points = [Point2f(cos(x)/2+0.3, sin(x)) for x in 0:0.1:π])],
-	       ["Mutually exclusive", "Co-modified"],
-		   orientation = :horizontal,
-		   framevisible = false)
-	Legend(gc[3, 1],
-		   [PolyElement(color=:black),
-			PolyElement(color="#dbdbdb", strokecolor=:darkgrey, strokewidth=1.5)],
-	       ["Modified", "Not modified"],
-		   orientation = :horizontal,
-		   framevisible = false)
-
-
-	for (label, layout) in zip(["A", "B", "C"],
-							   [ga[1, 1:2], gb[1, 1], gc[1, 1]])
-	    Label(layout[1, 1, TopLeft()], label,
-	        fontsize = 26,
-	        font = :bold,
-	        padding = (0, 5, 5, 0),
-	        halign = :right)
-	end
-
-	f
-	
+# ╔═╡ 879eaae7-21a2-40e7-9c31-ab9603e4947b
+function contingency(a, b)::Matrix{Integer}
+    [sum(a .== 0 .&& b .== 0) sum(a .== 0 .&& b .== 1)
+     sum(a .== 1 .&& b .== 0) sum(a .== 1 .&& b .== 1)]
 end
 
-# ╔═╡ db26dd6d-23c0-495c-973d-b4829d05ff57
+# ╔═╡ 6df047c1-f3a7-44ac-a444-f470e17d49a4
+contingency(Int.(comods.fisher_pvalue .< 0.05), Int.(comods.emp_pvalue .< 0.05))
+
+# ╔═╡ 3403dfc2-27fd-439d-875f-b981b946d603
 begin
-	local f = Figure(size = (1000, 100))
-	local ax = Axis(f[1, 1])
-	plot_isoforms_model!(ax, "PRRC2B"; transcripts = Set(["ENST00000682501.1", "ENST00000684596.1", "ENST00000683519.1"]), colors = Dict(["ENST00000682501.1" => :blue, "ENST00000684596.1" => :orange]), focus = (131496129-150, 131496179+200), rename = Dict(["ENST00000682501.1" => "PRRC2B-201", "ENST00000684596.1" => "PRRC2B-208", "ENST00000683519.1" => "PRRC2B-206"]))
-	f
+	local cont = contingency(Int.(comods.fisher_pvalue .< 0.05), Int.(comods.emp_pvalue .< 0.05))
+
+	
+	# (sum(cont[:, 1]), sum(cont[:, 2]), sum(cont[1, :]), sum(cont[2, :]))
+	local mcc = (cont[1, 1]*cont[2, 2] - cont[1, 2]*cont[2, 1])/prod(sqrt.(cont))
 end
+
+# ╔═╡ a88a543d-d11d-4941-b588-469b67a8f1cc
+contingency(Int.(ifelse.(comods.fisher_pvalue .!== missing, comods.fisher_pvalue, comods.pvalue) .< 0.01), Int.(comods.emp_pvalue .< 0.01))
 
 # ╔═╡ ea8b9460-5973-45c5-ac50-181ef50800da
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	local f = Figure(size = (1200, 1450))
 	local ga = f[1, 1] = GridLayout()
@@ -7652,6 +7285,834 @@ begin
 	f
 	
 end
+  ╠═╡ =#
+
+# ╔═╡ 0919f200-3984-4cab-9ac0-bf6e982ad566
+comods[occursin.("CDKN2A", comods.reference) .&& comods.genomicPos1 .== 21968192 .&& comods.genomicPos2 .== 21968114, :]
+
+# ╔═╡ 19894766-0820-47a2-9a0b-9dab37ca5daa
+maximum(ivt[occursin.("GNAS", ivt.ref_id), :genomicPos])
+
+# ╔═╡ faf85657-eb0e-4b9e-86db-74a3cc6b1c04
+an_sig_comods[occursin.("GNAS", an_sig_comods.reference), :]
+
+# ╔═╡ c107996c-abeb-423f-90a0-6aa5125df163
+an_sig_comods[an_sig_comods.genomicPos1 .== 58910358 .&& an_sig_comods.genomicPos2 .== 58910385, :]
+
+# ╔═╡ e2557d68-4418-4266-9e6b-adc99f5e5d9c
+sort(combine(groupby(an_sig_comods[occursin.("NOTCH3", an_sig_comods.reference), :], [:genomicPos1, :genomicPos2]), :phi => (phis -> maximum(phis) - minimum(phis)) => :phi_diff), :phi_diff, rev = true)
+
+# ╔═╡ 50e26ae2-bc4b-4324-88f7-8588276cc44a
+begin
+	gtf = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/gencode.v41.annotation.gtf", delim = '\t', comment = "#", header = [:chr, :source, :feature, :start, :end, :score, :strand, :frame, :attribute]))
+	gtf[!, :transcript_id] = map(a -> replace(split(split(a, "; ")[2], " ")[2], "\"" => ""), gtf.attribute)
+	gtf
+end
+
+# ╔═╡ 213085a9-e9de-4404-80de-a26b2566caa8
+gtf[occursin.("PRRC2B", gtf.attribute) .&& gtf.feature .== "exon", :]
+
+# ╔═╡ 4e8b6a0d-40bc-418c-8520-fa9365f43a85
+begin
+	local df = copy(an_sig_comods)
+	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
+	local selected = map(r -> r.pair in ["m6A-m7G", "m5C-m6A", "Y-m6A", "Y-m5C"], eachrow(df))
+	df = df[selected, :]
+	sort(combine(groupby(df, [:mod1, :mod2]), nrow => :count))
+end
+
+# ╔═╡ 0fc62ea4-35bd-410d-a0b9-2ad09140b327
+begin
+	local df = copy(an_sig_comods)
+	local nearfull_refs = filter(r -> r.pos_minimum <= 50, combine(groupby(ivt, :ref_id), :pos => minimum)).ref_id |> Set
+	df = df[in.(df.reference, Ref(nearfull_refs)), :]
+	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
+	local selected = map(r -> r.pair in ["m6A-m7G", "m5C-m6A", "Y-m6A", "Y-m5C"], eachrow(df))
+	df = df[selected, :]
+	df[!, :transcript_id] = map(r -> split(r, "|")[1], df.reference)
+	local ref = copy(gtf[gtf.feature .== "start_codon", [:transcript_id, :start, :end, :strand]])
+	ref[!, :start_codon] = ifelse.(ref.strand .== "+", ref.start, ref.end)
+	df = innerjoin(df, ref[:, [:transcript_id, :start_codon]], on = [:transcript_id], makeunique = true)
+	local ref = copy(gtf[gtf.feature .== "stop_codon", [:transcript_id, :start, :end, :strand]])
+	ref[!, :stop_codon] = ifelse.(ref.strand .== "+", ref.end, ref.start)
+	df = innerjoin(df, ref[:, [:transcript_id, :stop_codon]], on = [:transcript_id], makeunique = true)
+
+	# df = df[df.feature .!== missing, :]
+	# get_start = row -> row.strand == "+" ? row.start : row.end
+	# get_stop = row -> row.strand == "+" ? row.end : row.start
+
+	# local starts = Dict(map(r -> (r.transcript_id, get_start(r)), eachrow(gtf[gtf.feature .== "start_codon", :])))
+	# local stops = Dict(map(r -> (r.transcript_id, get_stop(r)), eachrow(gtf[gtf.feature .== "stop_codon", :])))
+
+	get_region = (row, pos) -> if row.strand == "+"
+		if pos < row.start_codon
+			:utr5
+		elseif pos >= row.start_codon && pos <= row.stop_codon
+			:cds
+		else
+			:utr3
+		end
+	else
+		if pos > row.start_codon
+			:utr5
+		elseif pos <= row.start_codon && pos >= row.stop_codon
+			:cds
+		else
+			:utr3
+		end
+	end
+
+	df[!, :region1] = map((row, pos) -> get_region(row, pos), eachrow(df), ifelse.(df.strand .== "+", df.genomicPos1, df.genomicPos2))
+	df[!, :region2] = map((row, pos) -> get_region(row, pos), eachrow(df), ifelse.(df.strand .== "+", df.genomicPos2, df.genomicPos1))
+
+	# sort(combine(groupby(df, [:region1, :region2]), nrow => :count), by = (r -> Dict(:utr5 => 1, :cds => 2, :utr3 => 3)[r]))
+	df = sort(combine(groupby(df, [:pair, :region1, :region2]), nrow => :count))
+
+
+	function get_matrix(df)
+		m = zeros(3, 3)
+		for (i, r1) in enumerate([:utr5, :cds, :utr3])
+			for (j, r2) in enumerate([:utr5, :cds, :utr3])
+				m[i, j] = sum(df[df.region1 .== r1 .&& df.region2 .== r2, :count])
+			end
+		end
+		m
+	end
+	local f = Figure(size = (1000, 250))
+	for (i, pair) in enumerate(unique(df.pair))
+		matrix = get_matrix(df[df.pair .== pair, :])
+		# matrix ./= sum(matrix)
+		ax = Axis(f[1, i],
+				  title = pair,
+				  xlabel = "Modification 1",
+				  ylabel = "Modification 2",
+				  xticks = (1:3, ["5' UTR", "CDS", "3' UTR"]),
+				  yticks = (1:3, ["5' UTR", "CDS", "3' UTR"]))
+		heatmap!(ax, matrix, colormap = :reds)
+	end
+	f
+end
+
+# ╔═╡ e266cb67-ce59-49e5-8ce3-5ca8e5128ded
+combine(groupby(filter(r -> r.mod1 !== missing && r.mod2 !== missing && r.mod1 != r.mod2 && r.mod1 in ["m6A", "m7G"] && r.mod2 in ["m6A", "m7G"], an_sig_comods), [:mod1, :mod2]), nrow => :count)
+
+# ╔═╡ 9e4877fe-5c7c-493d-aa24-a5d22fbde4fd
+gtf[gtf.feature .== "CDS", :]
+
+# ╔═╡ b5febe6e-e9b5-46b8-8e09-700e28abe37f
+gtf.feature |> unique
+
+# ╔═╡ 8334730d-6e9e-46f8-a797-0d4730df3ab4
+sum(combine(groupby(ivt, :ref_id), :pos => minimum).pos_minimum .< 50)
+
+# ╔═╡ 33a269c7-9271-4f58-ab63-1a0264cd1965
+data(sig_comods) *
+	mapping((:pos1, :pos2) => ((p1, p2) -> log10(abs(p1 - p2))) => "Distance (log-scale)", :phi => "← Mutually exclusive    φ    Co-occurring →         ") *
+	visual(Scatter; markersize = 4) |>
+	draw(; axis = (; title = "Effect size of modification pair association by distance",
+				   xticks = (map(log10, [(10:10:100)..., (200:100:1000)..., (2000:1000:10000)..., 11000, 12000]), ["10nt", repeat([""], 8)..., "100nt", repeat([""], 8)..., "1,000nt", repeat([""], 8)..., "10,000nt", "", ""]),
+				   limits = ((0.9, 4.2), (-1, 1))))
+
+# ╔═╡ cd4f0a10-228a-473d-a8d3-6e7af9fe42da
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	local f = Figure(size = (1600, 1100))
+	local trow = f[1, 1] = GridLayout()
+	local brow = f[2, 1] = GridLayout()
+
+	local sig_color = "#800080" # "#051094"
+
+
+	local df = copy(comods)[1:100, :]
+	df[!, :significant] = df.qvalue .< 0.01
+	local plt = data(df) *
+		mapping(:phi, :pvalue => (p -> -log10(p)), color = :significant) *
+		visual(Scatter; markersize = 5)
+	draw!(trow[1, 1],
+		  plt,
+		  scales(Color = (; palette = [:grey, sig_color]));
+		  axis = (; #title = "All modification pairs",
+				  	xlabel = "← Mutually exclusive    𝛗    Co-occurring →        ",
+					ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
+					limits = ((-1, 1), (-2, 310))))
+
+
+	# local df = renamemods(an_comods)
+	# df[!, :significant] = df.qvalue .< 0.05
+
+	# # local df = copy(an_sig_comods)
+	# df[!, :pair] = map(get_pair, df.mod1, df.mod2)
+	# df = df[in.(df.pair, Ref(Set(["m⁵C-m⁶A"]))), :]
+	# # df[!, :type] = map(assoc_type, df.residual00, df.residual01, df.residual10, df.residual11)
+	# # df[!, :phi] .*= ifelse.(df.type .== :comod, 1, -1)
+	# local plt = data(df) *
+	# 	mapping(:phi,
+	# 			:pvalue => (p -> -log10(p)) => "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
+	# 		    color = :significant) *
+	# 	visual(Scatter; markersize = 5)
+	# draw!(trow[1, 2],
+	# 	  plt,
+	# 	  scales(Color = (; palette = [:grey, sig_color]));
+	# 	  axis = (; title = "m⁵C-m⁶A",
+	# 			    xlabel = "← Mutually exclusive    𝛗    Co-occurring →       ",
+	# 				ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
+	# 				limits = ((-1, 1), (-2, 310))))
+
+	# === PLOT B VARIANT 1
+
+	# local df = copy(an_sig_comods)
+	# df[!, :type] = sign.(df.phi)
+	# df = filter(r -> r.mod1 !== missing && r.mod2 !== missing, df)
+	# df[!, :pair] = map(get_pair, df.mod1, df.mod2)
+	# # df = filter(r -> r.pair in ["m5C-m6A", "Y-m5C", "Y-m6A", "m6A-m7G", "m5C-m7G"], df)
+	# df = sort(combine(groupby(df, [:pair, :type]), nrow => :count))
+
+	# df = innerjoin(df[df.type .== 1, [:pair, :count]], df[df.type .== -1, [:pair, :count]], on = :pair, makeunique = true)
+	# df[!, :lfc] = log2.(df.count ./ df.count_1)
+	# df[!, :SE] = sqrt.(1 ./ df.count .+ 1 ./ df.count_1)
+	# df[!, :conf] = 1.96 .* df.SE
+	# df[!, :total] = df.count .+ df.count_1
+	# df = sort(df[df.count .> 30 .&& df.count_1 .> 30, :], :total)
+	# local ax = Axis(trow[1, 2],
+	# 				xlabel = "logFC (co-occurring/mutually-exclusive)",
+	# 				ylabel = "Modification pair",
+	# 			    yticks = (1:nrow(df), map((p, t) -> "$p ($t)", df.pair, df.total)))
+	# for (i, row) in enumerate(eachrow(df))
+	# 	scatter!(ax, [row.lfc], [i], color = :black)
+	# 	lines!(ax, [row.lfc - row.conf, row.lfc + row.conf], [i, i], color = :black)
+	# end
+	# xlims!(ax, [0, 4])
+
+	# === PLOT B VARIANT 2
+	
+	# local glori_mods = Set(zip(glori.chrom, glori.strand, glori.start))
+	# local df = renamemods(an_sig_comods)
+	
+	# df = filter(r -> select_m6A_nonm6A(r) || (r.mod1 === "m⁶A" && r.mod2 === "m⁶A"), df)
+	# # df[!, :significant] = df.qvalue .< 0.01
+	# df[!, :mod1] = ifelse.(df.mod1 .=== missing, "unknown non-m⁶A", df.mod1)
+	# df[!, :mod2] = ifelse.(df.mod2 .=== missing, "unknown non-m⁶A", df.mod2)
+	# local m1 = ifelse.(df.mod1 .== "m⁶A", df.mod1, df.mod2)
+	# local m2 = ifelse.(df.mod1 .== "m⁶A", df.mod2, df.mod1) # map(get_pair, df.mod1, df.mod2)
+	# df[!, :pair] = map((a, b) -> join([a, b], "-"), m1, m2)
+	# df[!, :type] = sign.(df.phi)
+	# local counts = combine(groupby(df, :pair), nrow => :count)
+	# counts = counts[counts.count .> 10, :]
+	# df = innerjoin(df, counts, on = [:pair])
+
+	# local df2 = copy(df)
+
+	# local perm_results = []
+	# for i in 1:10_000
+	# 	# df2[!, :mod1] = shuffle(df2.mod1)
+	# 	# df2[!, :mod2] = shuffle(df2.mod2)
+	# 	df2[!, :pair] = shuffle(df2.pair)
+	# 	x = combine(groupby(df2, [:pair, :type]), nrow => :count)
+	# 	x = innerjoin(x[x.type .== 1, [:pair, :count]],
+	# 				  x[x.type .== -1, [:pair, :count]],
+	# 				  on = :pair,
+	# 				  makeunique = true)
+	# 	x[!, :lfc] = log2.(x.count ./ x.count_1)
+	# 	push!(perm_results, x)
+	# end
+	# perm_results = vcat(perm_results...)
+	# # perm_results = combine(groupby(perm_results, :pair),
+	# # 					   :lfc => mean => :perm_mean_lfc,
+	# # 					   :lfc => std => :perm_std_lfc,
+	# # 					   :lfc => (lfc -> 1.96 * std(lfc)/sqrt(length(lfc))) => :perm_conf)
+	# local baseline = mean(perm_results.lfc)
+	
+	# df = filter(r -> r.mod1 !== missing && r.mod2 !== missing, df)
+	# # df = filter(r -> r.pair in ["m5C-m6A", "Y-m5C", "Y-m6A", "m6A-m7G", "m5C-m7G"], df)
+	# df = sort(combine(groupby(df, [:pair, :type]), nrow => :count))
+
+	# df = innerjoin(df[df.type .== 1, [:pair, :count]], df[df.type .== -1, [:pair, :count]], on = :pair, makeunique = true)
+	# df[!, :lfc] = log2.(df.count ./ df.count_1)
+	# df[!, :SE] = sqrt.(1 ./ df.count .+ 1 ./ df.count_1)
+	# df[!, :conf] = 1.96 .* df.SE
+	# df[!, :total] = df.count .+ df.count_1
+	# df = sort(df[df.count .> 2 .&& df.count_1 .> 2, :], :total)
+
+	# # df = sort(innerjoin(df, perm_results, on = [:pair]), :total)
+	
+	# local ax = Axis(trow[1, 2],
+	# 				xlabel = "logFC (co-occurring/mutually-exclusive)",
+	# 				ylabel = "Modification pair",
+	# 			    yticks = (1:nrow(df), map((p, t) -> "$p\n($t)", df.pair, df.total)))
+	# lines!(ax, [baseline, baseline], [0.5, nrow(df)+0.5], color = :orange, linestyle = :dash)
+	# for (i, row) in enumerate(eachrow(df))
+	# 	scatter!(ax, [row.lfc], [i], color = :black)
+	# 	lines!(ax, [row.lfc - row.conf, row.lfc + row.conf], [i, i], color = :black)
+
+	# 	# scatter!(ax, [row.perm_mean_lfc], [i], color = :orange)
+	# 	# lines!(ax, [row.perm_mean_lfc - row.perm_conf, row.perm_mean_lfc + row.perm_conf], [i, i], color = :orange)
+	# end
+	# xlims!(ax, [-1, 5])
+
+	# PLOT B VARIANT 3
+
+	local glori_mods = Set(zip(glori.chrom, glori.strand, glori.start))
+	local df = renamemods(an_sig_comods)
+	
+	df = filter(r -> select_m6A_nonm6A(r) || (r.mod1 === "m⁶A" && r.mod2 === "m⁶A"), df)
+	# df[!, :significant] = df.qvalue .< 0.01
+	df[!, :mod1] = ifelse.(df.mod1 .=== missing, "Unclassified", df.mod1)
+	df[!, :mod2] = ifelse.(df.mod2 .=== missing, "Unclassified", df.mod2)
+	local m1 = ifelse.(df.mod1 .== "m⁶A", df.mod1, df.mod2)
+	local m2 = ifelse.(df.mod1 .== "m⁶A", df.mod2, df.mod1) # map(get_pair, df.mod1, df.mod2)
+	df[!, :pair] = map((a, b) -> join([a, b], "-"), m1, m2)
+	df[!, :type] = sign.(df.phi)
+	local counts = combine(groupby(df, :pair), nrow => :count)
+	counts = counts[counts.count .> 10, :]
+	df = innerjoin(df, counts, on = [:pair])
+	df[!, :pair_label] = map((p, c) -> "$p\n($c)", df.pair, df.count)
+
+	sort!(df, :count)
+
+	local groups = combine(groupby(df, :pair),
+						   :phi => (ps -> skipmissing(ps)) => :phis)
+	groups = map(collect, groups.phis)
+	
+	println(HypothesisTests.KruskalWallisTest(groups...))
+	
+	local plt = data(df) *
+		mapping(:pair_label => presorted => "Modification pair",
+				:phi => "← Mutually exclusive    𝛗    Co-occurring →        ") *
+		visual(Violin;
+			   orientation = :horizontal,
+			   side = :right,
+			   color = "#FF33B5")
+	draw!(trow[1, 2], plt; axis = (; limits = ((-1, 1), (0.7, length(groups) + 0.7))))
+
+
+	local panel_c = trow[1, 3] = GridLayout()
+	local mods = copy(sig_peaks_ivt)
+	mods[!, :entropy1] = entropy.(eachrow(mods))
+	local df = innerjoin(sig_comods,
+						 mods[:, [:ref_id, :pos, :entropy1]],
+						 on = [:reference => :ref_id, :pos1 => :pos])
+	mods[!, :entropy2] = mods.entropy1
+	df = innerjoin(df,
+				   mods[:, [:ref_id, :pos, :entropy2]],
+				   on = [:reference => :ref_id, :pos2 => :pos])
+
+	df[!, :mean_entropy] = (df.entropy1 .+ df.entropy2) ./ 2
+
+	local plt = data(df) *
+		mapping((:pos1, :pos2) => ((p1, p2) -> log10(abs(p1 - p2))) => "Distance",
+				:phi => "← Mutually exclusive    𝛗    Co-occurring →         ",
+			    color = :mean_entropy) *
+		visual(Scatter; markersize = 5)
+	draw!(panel_c[1, 1],
+		  plt;
+		  axis = (;
+			# title = "Modification pairs' association strength by distance between them",
+			# xticks = (1:0.1:4.2,
+			# 		  ["10nt", repeat([""], 9)..., "100nt", repeat([""], 9)..., "1,000nt", repeat([""], 9)..., "10,000nt", "", ""]),
+			# xticks = (map(log10, [(10:10:100)..., (200:100:1000)..., (2000:1000:10000)..., 11000, 12000]), ["10nt", repeat([""], 8)..., "100nt", repeat([""], 8)..., "1,000nt", repeat([""], 8)..., "10,000nt", "", ""]),
+			# xticksize = [3.0, repeat([1], 8)..., 3, repeat([1], 8)..., 3, repeat([1], 8)..., 3, repeat([1], 2)...],
+			# xminorticksvisible = true,
+		 #    xminorgridvisible = true,
+			# xminorticksize = 1.5,
+			# xminorticks = IntervalsBetween(5),
+			xticks = (1:1:4, ["10nt", "100nt", "1,000nt", "10,000nt"]),
+			xminorticksvisible = true,
+		    xminorgridvisible = true,
+			xminorticksize = 2,
+			xminorticks = map(log10, [(20:10:90)..., (200:100:900)..., (2000:1000:9000)..., 11000, 12000]),
+			limits = ((0.9, 4.2), (-1, 1))))
+	Colorbar(panel_c[1, 2], limits = [0, 1], colormap = :viridis,
+    vertical = true, label = "Information content")
+	colsize!(panel_c, 1, Relative(5/6))
+
+	
+
+	local ax = Axis(brow[1, 1:3],
+				    xtickformat = "{:,d}")# (vals -> map(format_with_commas, vals)))
+				    # height = 110)
+	# plot_isoforms_model!(ax, "PRRC2B"; transcripts = Set(["ENST00000682501.1", "ENST00000684596.1", "ENST00000683519.1"]), colors = Dict(["ENST00000682501.1" => :blue, "ENST00000684596.1" => :orange]), focus = (131496129-150, 131496179+200), rename = Dict(["ENST00000682501.1" => "PRRC2B-201", "ENST00000684596.1" => "PRRC2B-208", "ENST00000683519.1" => "PRRC2B-206"]))
+	
+	# # local ax = Axis(gb[1, 1])
+	# local tx1_mask = occursin.("ENST00000682501.1", an_sig_comods.reference)
+	# local tx2_mask = occursin.("ENST00000684596.1", an_sig_comods.reference)
+	# local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
+	# 			  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
+	# arc_plot_genomic2(brow[2, 1],
+	# 				  renamemods(an_sig_comods[tx1_mask, :]),
+	# 				  an_sig_peaks_ivt[occursin.("ENST00000682501.1", an_sig_peaks_ivt.ref_id), :];
+	# 				  range=(5000, 5300),
+	# 				  grange=(131496129-150, 131496179+100),
+	# 				  colorrange=colorrange,
+	# 				  title="PRRC2B-201",
+	# 				  highlight=(5089, 5139),
+	# 				  spinecolor=:blue)
+	# arc_plot_genomic2(brow[3, 1],
+	# 				  renamemods(an_sig_comods[tx2_mask, :]),
+	# 				  an_sig_peaks_ivt[occursin.("ENST00000684596.1", an_sig_peaks_ivt.ref_id), :];
+	# 				  range=(0, 12000),
+	# 				  grange=(131496129-150, 131496179+100),
+	# 				  colorrange=colorrange,
+	# 				  title="PRRC2B-208",
+	# 				  highlight=(7211, 7261),
+	# 				  spinecolor=:orange)
+	# Colorbar(brow[2:3, 2], limits = colorrange, colormap = :viridis,
+ #    vertical = true, label = "-log₁₀(𝑃-value)")
+	local gpos1 = 76066564
+	local gpos2 = 76066573
+	local row1 = an_sig_comods[an_sig_comods.genomicPos1 .=== gpos1 .&& an_sig_comods.genomicPos2 .=== gpos2, :][2, :]
+	local row2 = an_sig_comods[an_sig_comods.genomicPos1 .=== gpos1 .&& an_sig_comods.genomicPos2 .=== gpos2, :][1, :]
+	local tx1 = split(row1.reference, "|")[1]
+	local tx2 = split(row2.reference, "|")[1]
+	local name1 = split(row1.reference, "|")[5]
+	local name2 = split(row2.reference, "|")[5]
+	
+	# local ax = Axis(gb[1, 1:2],
+	# 			    height = 110)
+	plot_isoforms_model!(ax, "MDH"; transcripts = Set([tx1, tx2]), colors = Dict([tx1 => :blue, tx2 => :orange]), focus = (gpos1-100, gpos2+100), rename = Dict([tx1 => name1, tx2 => name2]))
+	
+	# local ax = Axis(gb[1, 1])
+	local tx1_mask = occursin.(tx1, an_sig_comods.reference)
+	local tx2_mask = occursin.(tx2, an_sig_comods.reference)
+	local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
+				  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
+	local ax1, max_radius1 = arc_plot_genomic2(brow[2, 1],
+					  renamemods(an_sig_comods[tx1_mask, :]),
+					  an_sig_peaks_ivt[occursin.(tx1, an_sig_peaks_ivt.ref_id), :];
+					  range=(row1.pos1-2000, row1.pos2+2000),
+					  grange=(gpos1-100, gpos2+100),
+					  colorrange=colorrange,
+					  title=name1,
+					  highlight=(row1.pos1, row1.pos2),
+					  spinecolor=:blue)
+	text!(ax1, 2, 8; text = "Co-occurring", align = (:left, :top))
+	text!(ax1, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
+	local ax2, max_radius2 = arc_plot_genomic2(brow[3, 1],
+					  renamemods(an_sig_comods[tx2_mask, :]),
+					  an_sig_peaks_ivt[occursin.(tx2, an_sig_peaks_ivt.ref_id), :];
+					  range=(row2.pos1-2000, row2.pos2+2000),
+					  grange=(gpos1-100, gpos2+100),
+					  colorrange=colorrange,
+					  title=name2,
+					  highlight=(row2.pos1, row2.pos2),
+					  spinecolor=:orange)
+	text!(ax2, 2, 8; text = "Co-occurring", align = (:left, :top))
+	text!(ax2, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
+	local max_radius = max(max_radius1, max_radius2) * 2
+	ylims!(ax1, -max_radius, max_radius)
+	ylims!(ax2, -max_radius, max_radius)
+	Colorbar(brow[2:3, 2], limits = colorrange, colormap = :viridis,
+    vertical = true, label = "-log₁₀(𝑃-value)")
+	
+
+	local ref = row1.reference
+	local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", ref)
+	# local f = Figure(size = (600, 600))
+	
+
+	local df = DataFrame(Tables.table(probs[:, [row1.pos1+1-4, row1.pos2+1-4]] .> 0.5))
+	dropmissing!(df)
+	local observed1 = contingency(df.Column1, df.Column2) .+ 1
+	local res1 = HypothesisTests.ChisqTest(observed1)
+
+	local ref = row2.reference
+	local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", ref)
+	# local f = Figure(size = (600, 600))
+	
+
+	local df = DataFrame(Tables.table(probs[:, [row2.pos1+1-4, row2.pos2+1-4]] .> 0.5))
+	dropmissing!(df)
+	local observed2 = contingency(df.Column1, df.Column2) .+ 1
+	local res2 = HypothesisTests.ChisqTest(observed2)
+
+
+	local grid = brow[2:3, 3] = GridLayout()
+
+	local matrices = [(Int.(round.(res1.expected; digits = 0)), observed1),
+					  (Int.(round.(res2.expected; digits = 0)), observed2)]
+	local titles = [name1, name2]
+	for (i, (expected, observed)) in enumerate(matrices)
+		expected = expected[2:-1:1, :]
+		observed = observed[2:-1:1, :]
+		
+	    # Create an axis for this heatmap
+	    ax = Axis(grid[i, 1],
+				  title = titles[i],
+				  aspect = 1,
+				  xticks = (1:2, ["Unmodified", "Modified"]),
+				  yticks = (1:2, ["Unmodified", "Modified"]),
+				  yticklabelrotation = π/2)
+
+		println(transpose(log2.(observed ./ expected)))
+	    # Plot the heatmap
+	    heatmap!(ax, transpose(log2.(observed ./ expected)),
+	             colormap = :diverging_bwr_40_95_c42_n256,
+				 colorrange = (-2.5, 2.5))
+	             # colorrange = (0, max_count))
+	
+	    # Add row and column labels
+		# if i < 1
+		ax.xlabel = "$(format_with_commas(gpos1))\nm⁵C"
+		ax.ylabel = "?\n$(format_with_commas(gpos2))"
+		# else
+		# 	ax.xlabel = "Pos. 7211 (m⁶A)"
+		# 	ax.ylabel = "Pos. 7261 (m⁵C)"
+		# end
+	
+	    # Annotate cells with values (optional)
+	    for j in 1:2, k in 1:2
+	        text!(ax, string(observed[j, k]) * "/" * string(expected[j, k]),
+	              position = (k, j),
+				  fontsize = 13.5,
+	              align = (:center, :center),
+	              color = :black)
+	    end
+	end
+
+	# Legend(brow[4, 1],
+	# 	   [LineElement(points = [Point2f(cos(x)/2+0.3, sin(x) + 1) for x in 0:-0.1:-π]),
+	# 		LineElement(points = [Point2f(cos(x)/2+0.3, sin(x)) for x in 0:0.1:π])],
+	#        ["Mutually exclusive", "Co-occurring"],
+	# 	   orientation = :horizontal,
+	# 	   framevisible = false)
+
+
+	colsize!(trow, 1, Relative(5/18))
+	colsize!(trow, 2, Relative(5/18))
+	colsize!(trow, 3, Relative(8/18))
+
+	colsize!(brow, 1, Relative(11/13))
+	colsize!(brow, 2, Relative(0.5/13))
+	colsize!(brow, 3, Relative(1.5/13))
+	# rowsize!(f.layout, 1, Relative(1.8/7))
+	
+	rowsize!(f.layout, 1, Relative(3/8))
+	rowsize!(f.layout, 2, Relative(5/8))
+
+	rowsize!(brow, 1, Relative(1/7))
+	rowsize!(brow, 2, Relative(3/7))
+	rowsize!(brow, 3, Relative(3/7))
+	# rowsize!(brow, 4, Relative(1/10))
+	# rowsize!(brow, 5, Relative(2/10))
+
+	# Legend(ga[2, 1:2],
+	# 	   [PolyElement(color=Makie.wong_colors()[1]),
+	# 	    PolyElement(color=Makie.wong_colors()[2])],
+	#        ["Negative association", "Positive association"],
+	# 	   orientation = :horizontal,
+	# 	   framevisible = false)
+	
+	# Legend(gc[3, 1],
+	# 	   [PolyElement(color=:black),
+	# 		PolyElement(color="#dbdbdb", strokecolor=:darkgrey, strokewidth=1.5)],
+	#        ["Modified", "Not modified"],
+	# 	   orientation = :horizontal,
+	# 	   framevisible = false)
+
+
+	for (label, layout) in zip(["A", "B", "C", "D"],
+							   [trow[1, 1], trow[1, 2], trow[1, 3], brow[1, 1]])
+	    Label(layout[1, 1, TopLeft()], label,
+	        fontsize = 26,
+	        font = :bold,
+	        padding = (0, 5, 5, 0),
+	        halign = :right)
+	end
+
+	f
+	
+end
+  ╠═╡ =#
+
+# ╔═╡ a5392b4a-bf22-4936-8426-476e85ccd92e
+import LinearAlgebra
+
+# ╔═╡ 755f8682-9890-4edb-bd0e-7c02f8acb3b2
+(rand()-0.5)/10
+
+# ╔═╡ 1613721e-9aa9-4898-aeff-68e90cd2a6bb
+function place_labels_nonoverlapping(points, labels; offset=0.05, padding=0.01, width_factor = 0.05, height = 0.05, gene_offsets = Dict())
+    n = length(points)
+    label_positions = Vector{Point2f}(undef, n)
+
+    # Initial placement: offset from each point
+    for i in 1:n
+		final_offset = sign(points[i][1]) * get(gene_offsets, labels[i], offset)
+        label_positions[i] = points[i] .+ (final_offset, 0)# (rand()-0.5)/10)
+    end
+
+    # Function to compute label extents (simplified)
+    function compute_extents(pos, label)
+        # Approximate text width/height (adjust as needed)
+        width = width_factor * length(label)
+        Rect2f(pos[1] - width/2, pos[2] - height/2, width, height)
+    end
+
+	function intersects(a::Rect2f, b::Rect2f)
+	    a_min_x = a.origin[1]
+	    a_max_x = a.origin[1] + a.widths[1]
+	    a_min_y = a.origin[2]
+	    a_max_y = a.origin[2] + a.widths[2]
+	
+	    b_min_x = b.origin[1]
+	    b_max_x = b.origin[1] + b.widths[1]
+	    b_min_y = b.origin[2]
+	    b_max_y = b.origin[2] + b.widths[2]
+	
+	    return !(a_max_x < b_min_x || a_min_x > b_max_x ||
+	             a_max_y < b_min_y || a_min_y > b_max_y)
+	end
+
+    # Iteratively adjust positions to avoid overlap
+    for _ in 1:30  # Max iterations
+        for i in 1:n
+            ext_i = compute_extents(label_positions[i], labels[i])
+            for j in 1:n
+                if i == j
+                    continue
+                end
+                ext_j = compute_extents(label_positions[j], labels[j])
+                if intersects(ext_i, ext_j)
+                    # Move label i away from label j
+                    dir = LinearAlgebra.normalize(label_positions[i] - label_positions[j])
+                    label_positions[i] += dir * 0.02
+                end
+            end
+        end
+    end
+
+    return label_positions
+end
+
+# ╔═╡ 6b71f0e3-288b-490a-9ab8-aeef32021708
+begin
+
+	# Example usage
+	local points = rand(Point2f, 10)
+	local labels = ["Label $i" for i in 1:10]
+	
+	local fig = Figure()
+	local ax = Axis(fig[1, 1])
+	
+	scatter!(ax, points, color=:blue, markersize=15)
+	
+	local label_positions = place_labels_nonoverlapping(points, labels; offset=0.06, padding=0.05)
+	
+	for (p, lp, label) in zip(points, label_positions, labels)
+		xalign = (lp[1] > p[1] ? :left : :right)
+	    text!(ax, label, position=lp, align=(xalign, :center), color=:black)
+	    lines!(ax, [p, lp], color=:gray, linewidth=0.5)
+	end
+	
+	fig
+
+end
+
+# ╔═╡ ebeafdca-d72f-4f7e-88ae-93074150e041
+combine(groupby(an_sig_comods, :reference), (df -> df[1:min(5, size(df, 1)), :]))
+
+# ╔═╡ 5f9e87a6-e6b2-4a81-8f0a-0a5ba174b45c
+md"""
+# Final paper plot
+"""
+
+# ╔═╡ 854eef7a-e911-4f5b-8562-5bbd22e0c900
+LABELSIZE = 18
+
+# ╔═╡ d57a1fed-bd4a-485f-8aef-8cacfb7a294a
+function plot_isoforms_model!(ax, gene; transcripts = nothing, colors = Dict(), focus = nothing, rename = nothing, fontsize=12, lpadding=0)
+	exons = gtf[occursin.(gene, gtf.attribute) .&& occursin.("transcript_type \"protein_coding\"", gtf.attribute) .&& gtf.feature .== "exon", :]
+	cdses = gtf[occursin.(gene, gtf.attribute) .&& occursin.("transcript_type \"protein_coding\"", gtf.attribute) .&& gtf.feature .== "CDS", :]
+	refs = exons.transcript_id |> unique |> collect |> sort
+	if !isnothing(transcripts)
+		refs = transcripts |> unique |> collect |> sort
+	end
+	exons = exons[in.(exons.transcript_id, Ref(refs)), :]
+	leftmost = minimum(exons.start)
+	rightmost = maximum(exons.end)
+	distance = rightmost - leftmost
+	# refs = filter(r -> occursin(gene, r), keys(gtf.attribute)) |> unique |> collect |> sort)
+	N = length(refs)
+	i = length(refs) - 1
+	max_label_len = 0
+	for ref in refs
+		ref_exons = exons[exons.transcript_id .== ref, :]
+		ref_cdses = cdses[cdses.transcript_id .== ref, :]
+		color = get(colors, ref, :black)
+		for exon in eachrow(ref_exons)
+			lines!(ax, [exon.start, exon.end], [i, i], linewidth = 12, color = color)
+		end
+		for cds in eachrow(ref_cdses)
+			lines!(ax, [cds.start, cds.end], [i, i], linewidth = 20, color = color)
+		end
+		lines!(ax, [minimum(ref_exons.start), maximum(ref_exons.end)], [i, i], linewidth = 1, color = color)
+		label = isnothing(rename) ? ref : get(rename, ref, ref)
+		text!(ax, leftmost - distance * 0.02, i; text = label, align = (:right, :center), fontsize=fontsize)
+		max_label_len = max(max_label_len, length(label))
+
+		scatter!(ax, range(leftmost, rightmost; length = 40), repeat([i], 40);
+			 marker = exons[1, :strand] == "+" ? :rtriangle : :ltriangle,
+			 color = color)
+		
+		i -= 1
+	end
+
+	if !isnothing(focus)
+		(left, right) = focus
+		poly!(Point2f[(left, N-1+0.45), (right, N-1+0.45), (right, -0.45), (left, -0.45)], strokecolor = :red, strokewidth = 2, color=("#F0F0F0", 0.25))
+	end
+	
+	ylims!(ax, -0.5, length(refs) - 0.5)
+	xlims!(ax, low=leftmost - distance * 0.02 - lpadding, high=rightmost)
+	ax.xlabel = exons[1, :chr]
+	ax.xlabelsize = LABELSIZE
+	hidespines!(ax)
+	# hidexdecorations!(ax)
+	hideydecorations!(ax)
+end
+
+# ╔═╡ eddcd4e1-1ae0-40bb-8d0a-751fdd416caf
+begin
+	local f = Figure(size = (1200, 1450))
+	local ga = f[1, 1] = GridLayout()
+	local gb = f[2, 1] = GridLayout()
+	local gc = f[3, 1] = GridLayout()
+
+
+	local df = renamemods(an_sig_comods)
+
+	df[!, :pair] = map(get_pair, df.mod1, df.mod2)
+	df = df[in.(df.pair, Ref(Set(["m⁵C-m⁶A", "m⁵C-Ψ", "m⁶A-Ψ", "m⁶A-m⁷G"]))), :]
+	# df[!, :type] = map(assoc_type, df.residual00, df.residual01, df.residual10, df.residual11)
+	# df[!, :phi] .*= ifelse.(df.type .== :comod, 1, -1)
+	local plt = data(df) *
+		mapping(:phi => "φ", :pvalue => (p -> -log10(p)) => "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", col = :pair) *
+		visual(Scatter; markersize = 5)
+	draw!(ga[1, 1:2], plt)
+
+	local ax = Axis(gb[1, 1:2],
+				    height = 110)
+	plot_isoforms_model!(ax, "RPL34"; transcripts = Set(["ENST00000394665.5", "ENST00000502534.5"]), colors = Dict(["ENST00000394665.5" => :blue, "ENST00000502534.5" => :orange]), focus = (108625238-150, 108625248+200), rename = Dict(["ENST00000394665.5" => "RPL34-201", "ENST00000502534.5" => "RPL34-204"]))
+	
+	# local ax = Axis(gb[1, 1])
+	local tx1_mask = occursin.("ENST00000394665.5", an_sig_comods.reference)
+	local tx2_mask = occursin.("ENST00000502534.5", an_sig_comods.reference)
+	local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
+				  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
+	arc_plot_genomic2(gb[2, 1],
+					  renamemods(an_sig_comods[tx1_mask, :]),
+					  an_sig_peaks_ivt[occursin.("ENST00000394665.5", an_sig_peaks_ivt.ref_id), :];
+					  range=(512-50, 522+50),
+					  grange=(108625238-100, 108625248+100),
+					  colorrange=colorrange,
+					  title="RPL34-201",
+					  highlight=(0, 1000),
+					  spinecolor=:blue)
+	arc_plot_genomic2(gb[3, 1],
+					  renamemods(an_sig_comods[tx2_mask, :]),
+					  an_sig_peaks_ivt[occursin.("ENST00000502534.5", an_sig_peaks_ivt.ref_id), :];
+					  range=(421-100, 431+100),
+					  grange=(108625238-100, 108625248+100),
+					  colorrange=colorrange,
+					  title="RPL34-204",
+					  highlight=(0, 1000),
+					  spinecolor=:orange)
+	Colorbar(gb[2:3, 2], limits = colorrange, colormap = :viridis,
+    vertical = true, label = "-log₁₀(𝑃-value)")
+	
+
+	# local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", "ENST00000304494.10|ENSG00000147889.18|OTTHUMG00000019686.7|OTTHUMT00000051915.1|CDKN2A-201|CDKN2A|978|protein_coding|")
+	# # local f = Figure(size = (600, 600))
+	
+
+	# local df = DataFrame(Tables.table(probs[:, [1385, 1584]] .> 0.75))
+	# dropmissing!(df)
+	# local n2 = nrow(df)
+	# println(contingency(df.Column1, df.Column2))
+	# local ax1 = Axis(gc[1, 1],
+	# 				 title="YWHAE-201",
+	# 			     # aspect = 0.3,
+	# 			     yticks=(1:2, ["m⁶A", "m⁵C"]),
+	# 				 xticks=(0:(n2/10):n2, ["$x%" for x in 0:10:100]),
+	# 			     xlabel="")
+	# println("n2: $n2")
+	# println(reduce(*, map(sum, eachcol(df)) ./ nrow(df)) * nrow(df))
+	# println(sum(df.Column1 .== 1 .&& df.Column2 .== 1))
+	# heatmap!(ax1, Array(sort(df)), colormap=["#dbdbdb", :black])
+
+	# local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", "ENST00000571732.5|ENSG00000108953.17|OTTHUMG00000134316.7|OTTHUMT00000437356.1|YWHAE-208|YWHAE|1818|protein_coding|")
+	# # local f = Figure(size = (600, 600))
+
+	# local df = DataFrame(Tables.table(probs[:, [1416, 1615]] .> 0.75))
+	# dropmissing!(df)
+	# local n1 = nrow(df)
+	# local ax2 = Axis(gc[2, 1],
+	# 			 title="YWHAE-208",
+	# 			 # aspect = 0.3,
+	# 			 yticks=(1:2, ["m⁶A", "m⁵C"]),
+	# 			 xticks=(0:(n1/10):n1, ["$x%" for x in 0:10:100]),
+	# 			 xlabel="Reads")
+	# println("n1: $n1")
+	# println(reduce(*, map(sum, eachcol(df)) ./ nrow(df)) * nrow(df))
+	# println(sum(df.Column1 .== 1 .&& df.Column2 .== 1))
+	# heatmap!(ax2, Array(sort(df)), colormap=["#dbdbdb", :black])
+
+
+	
+	
+	# xlims!(ax1, (0, max(n1, n2)))
+	# xlims!(ax2, (0, max(n1, n2)))
+	
+
+	# colsize!(f.layout, 2, Relative(7/10))
+	# colsize!(f.layout, 3, Relative(1/10))
+	rowsize!(f.layout, 1, Relative(1.8/7))
+	rowsize!(f.layout, 2, Relative(3.9/7))
+	rowsize!(f.layout, 3, Relative(1.3/7))
+
+	rowsize!(gb, 2, Relative(2/5))
+	rowsize!(gb, 3, Relative(2/5))
+
+	# Legend(ga[2, 1:2],
+	# 	   [PolyElement(color=Makie.wong_colors()[1]),
+	# 	    PolyElement(color=Makie.wong_colors()[2])],
+	#        ["Negative association", "Positive association"],
+	# 	   orientation = :horizontal,
+	# 	   framevisible = false)
+	Legend(gb[4, 1],
+		   [LineElement(points = [Point2f(cos(x)/2+0.3, sin(x) + 1) for x in 0:-0.1:-π]),
+			LineElement(points = [Point2f(cos(x)/2+0.3, sin(x)) for x in 0:0.1:π])],
+	       ["Mutually exclusive", "Co-modified"],
+		   orientation = :horizontal,
+		   framevisible = false)
+	Legend(gc[3, 1],
+		   [PolyElement(color=:black),
+			PolyElement(color="#dbdbdb", strokecolor=:darkgrey, strokewidth=1.5)],
+	       ["Modified", "Not modified"],
+		   orientation = :horizontal,
+		   framevisible = false)
+
+
+	for (label, layout) in zip(["A", "B", "C"],
+							   [ga[1, 1:2], gb[1, 1], gc[1, 1]])
+	    Label(layout[1, 1, TopLeft()], label,
+	        fontsize = 26,
+	        font = :bold,
+	        padding = (0, 5, 5, 0),
+	        halign = :right)
+	end
+
+	f
+	
+end
+
+# ╔═╡ db26dd6d-23c0-495c-973d-b4829d05ff57
+begin
+	local f = Figure(size = (1000, 100))
+	local ax = Axis(f[1, 1])
+	plot_isoforms_model!(ax, "PRRC2B"; transcripts = Set(["ENST00000682501.1", "ENST00000684596.1", "ENST00000683519.1"]), colors = Dict(["ENST00000682501.1" => :blue, "ENST00000684596.1" => :orange]), focus = (131496129-150, 131496179+200), rename = Dict(["ENST00000682501.1" => "PRRC2B-201", "ENST00000684596.1" => "PRRC2B-208", "ENST00000683519.1" => "PRRC2B-206"]))
+	f
+end
 
 # ╔═╡ dbf67725-f43f-49a7-8ef5-57b60acdbc67
 begin
@@ -7795,8 +8256,53 @@ end
 # ╔═╡ 9bd1d228-e255-48ec-ba0f-07e5ac026581
 LABELPAD = 0
 
+# ╔═╡ 7dd9fe5b-c6d2-4e69-adf5-c7240f54e020
+begin
+	local fig = Figure()
+	local ax = Axis(fig[1, 1])
+
+	local inset_ax = Axis(fig[1, 1],
+						  width=Relative(0.5),
+						  height=Relative(0.2),
+						  halign=0.05,
+						  valign=0.95,
+						  backgroundcolor="#F0F0F0")
+	hidedecorations!(inset_ax)
+	local tx = "ENST00000234875.9"
+	local name = "RPL22"
+
+	plot_isoforms_model!(inset_ax, "ENST00000234875.9"; transcripts = Set([tx]), colors = Dict([tx => :black]), rename = Dict([tx => name]), focus=(0, 100))
+
+	
+	fig
+end
+
+# ╔═╡ bf1d3910-2680-40c4-95e9-20969fb5c1f8
+sort(combine(groupby(sig_comods, [:reference]),
+	    :phi => (ps -> maximum(ps) - minimum(ps)) => :phi_diff,
+	    nrow => :count), :phi_diff, rev = true)
+
+# ╔═╡ 1bcc41a6-aa15-4118-8a88-0a160ce1df5f
+
+
 # ╔═╡ 0bf65cb8-d144-4384-b7c1-682c219a71ba
 sig_comods
+
+# ╔═╡ 50cc58bc-2b7a-4501-8405-5f178beddc44
+
+
+# ╔═╡ 4db1d361-eb5c-45cd-9b4f-aaeb9b5528b6
+filter(r -> r.x1, combine(groupby(sig_comods, [:reference]),
+	    (df -> any(df.pvalue .< 1e-50 .&& df.phi .> 0) && any(df.pvalue .< 1e-20 .&& df.phi .< 0))))
+
+# ╔═╡ dc7a2b77-4b3c-46d6-bc09-1a98dabf8c88
+filter(r -> r.x1, combine(groupby(sig_comods, [:reference]),
+	    (df -> any(df.pvalue .< 1e-30 .&& df.phi .> 0) && any(df.pvalue .< 1e-10 .&& df.phi .< 0))))
+
+# ╔═╡ 795cbda2-5cb9-4e63-bc09-43b55288dd5c
+sort(combine(groupby(sig_comods, [:reference]),
+		[:pvalue, :phi] => ((pvalue, phi) -> sum(pvalue .< 1e-10 .&& phi .> 0.1)) => :npos,
+	    [:pvalue, :phi] => ((pvalue, phi) -> sum(pvalue .< 1e-10 .&& phi .< -0.1)) => :nneg), [:nneg, :npos], rev = true)
 
 # ╔═╡ 347a22fe-b7a4-422b-a229-d34369e64422
 Associations.association(Associations.GaussianMI, [0, 0, 1, 1, 0, 0, 1, 1], [0, 0, 1, 1, 0, 0, 1, 1])
@@ -8147,7 +8653,7 @@ cancer_genes = DataFrame(CSV.File("/home/mzdravkov/cancerGeneList.tsv",
 an_sig_comods[occursin.("GNAS", an_sig_comods.reference), :]
 
 # ╔═╡ 03f335b8-97de-4b2b-b03d-000800ae6565
-function plot_gene_comods(sig_comods, gtf, gene; axis = nothing, colormap = :seaborn_crest_gradient, colorrange = (0, 100), highclip = :black, min_w = 2, max_w = 8)
+function plot_gene_comods(sig_comods, gtf, gene; axis = nothing, colormap = :seaborn_crest_gradient, colorrange = (0, 100), highclip = :black, min_w = 2, max_w = 8, xlimits = nothing)
 	pairs = sig_comods[occursin.(gene, sig_comods.reference), :]
 	exons = gtf[gtf.feature .== "exon" .&& occursin.(gene, gtf.attribute), :]
 
@@ -8210,6 +8716,10 @@ function plot_gene_comods(sig_comods, gtf, gene; axis = nothing, colormap = :sea
 
 	hideydecorations!(ax)
 
+	if !isnothing(xlimits)
+		xlims!(ax, xlimits)
+	end
+
 	if isnothing(axis)
 		fig
 	else
@@ -8217,11 +8727,304 @@ function plot_gene_comods(sig_comods, gtf, gene; axis = nothing, colormap = :sea
 	end
 end
 
+# ╔═╡ 7c0d7864-53ce-4fa1-bc8d-b87ce0eb2801
+function plot_gene_comods_elliptical_arcs(sig_comods, gtf, gene; axis = nothing, colormap = :seaborn_crest_gradient, colorrange = (0, 100), highclip = :darkblue, min_w = 2, max_w = 8, xlimits = nothing, minheight=missing, maxheight=missing, dotsize=10, fig=nothing, legend=true, fontsize=14)
+	pairs = copy(sig_comods[occursin.(gene, sig_comods.reference), :])
+	exons = gtf[gtf.feature .== "exon" .&& occursin.(gene, gtf.attribute), :]
+	cds = gtf[gtf.feature .== "CDS" .&& occursin.(gene, gtf.attribute), :]
+
+
+	shift = minimum(exons.start)
+	# minx = minimum(exons.start)
+	minx = 0
+	maxx = maximum(exons.end) - shift
+
+	if isnothing(axis)
+		fig = Figure(size = (1200, 600))
+		ax = Axis(fig[1, 1])
+	else
+		ax = axis
+	end
+
+	ticks = round.(range(minx, maxx; length = 4); digits = 0)
+	ax.xticks = (ticks, [format_with_commas(Int(t)) for t in ticks .+ shift])
+
+	chr = pairs[1, :chr]
+	# text!(ax, -(maxx-minx)/30, 0; text = chr, align = (:right, :center))
+	ax.xlabel = chr
+	ax.xlabelsize = LABELSIZE
+
+	lines!(ax, [minx, maxx], [0, 0], color = :black, linewidth = 1)
+	scatter!(ax, range(minx, maxx; length = 40), zeros(40);
+			 marker = pairs[1, :strand] == "+" ? :rtriangle : :ltriangle,
+			 color = :black)
+
+	for exon in eachrow(exons)
+		lines!(ax, [exon.start - shift, exon.end - shift], [0, 0], color = :black, linewidth = 10)
+	end
+	for region in eachrow(cds)
+		lines!(ax, [region.start - shift, region.end - shift], [0, 0], color = :black, linewidth = 20)
+	end
+
+	pairs[!, :neglogp] = -log10.(pairs.fisher_pvalue)
+	# tx_data[‘neglogp’] = -np.log10(tx_data[‘p_value’])
+    # min_w, max_w = 0.5, 6
+    # w_norm = (pairs.neglogp .- minimum(pairs.neglogp)) ./
+                 # (maximum(pairs.neglogp) - minimum(pairs.neglogp) + 1e-9)
+	w_norm = pairs.phi
+	pairs[!, :linewidth] = min_w .+ (max_w - min_w) .* w_norm
+
+	pairs = renamemods2(pairs)
+
+	mods1 = pairs[:, [:genomicPos1, :mod1]]
+	rename!(mods1, [:pos, :mod])
+	mods2 = pairs[:, [:genomicPos2, :mod2]]
+	rename!(mods2, [:pos, :mod])
+	mods = vcat(mods1, mods2)
+	mods[!, :y] .= 0
+
+	# scatter!(ax, mods.pos, zeros(nrow(mods)), color=coalesce.(mods.mod, "missing"))
+
+	previous_pos = chr == "+" ? 0 : Inf
+	close_num = 0
+	for (i, pair) in enumerate(eachrow(pairs))
+		alpha = 0.25 + (1 - 0.25) * abs(pair.phi)
+		left = min(pair.genomicPos1, pair.genomicPos2) - shift
+		right = max(pair.genomicPos1, pair.genomicPos2) - shift
+		distance = right - left
+		radius = distance/2
+		
+		center = left + radius
+		orientation = sign(pair.phi)
+
+		h = ismissing(minheight) ? radius : max(minheight, radius)
+		h = ismissing(maxheight) ? h : min(h, maxheight)
+		current_pos = chr == "+" ? left : right
+		if abs(previous_pos - current_pos) > (maxx - minx)/10
+			previous_pos = current_pos
+			close_num = 0
+		else
+			close_num += 1
+		end
+		h += close_num*coalesce(maxheight/10, 100)
+
+		t = range(0, orientation*π, 100)
+		x = radius * cos.(t)
+		y = minimum(h) * sin.(t) .+ orientation .* 5
+		lines!(ax, center.+x, y,
+			   color = pair.neglogp, #pair.phi,
+			   # linewidth = pair.linewidth,
+			   linewidth = 2,
+			   # alpha = alpha,
+			   colormap = colormap,
+			   colorrange = colorrange,#(minimum(pairs.phi), maximum(pairs.phi)),
+			   highclip = highclip)
+		
+		# arc!(ax, Point2f(center, 0), radius, 0, orientation*π,
+		# 	 color = pair.neglogp, #pair.phi,
+		# 	 linewidth = pair.linewidth,
+		# 	 alpha = alpha,
+		# 	 colormap = colormap,
+		# 	 colorrange = colorrange,#(minimum(pairs.phi), maximum(pairs.phi)),
+		# 	 highclip = highclip,
+		# 	 resolution = 10000)
+		println(pair.phi)
+	end
+
+	local dots = data(mods) *
+		mapping(:pos => (p -> p - shift), :y, color=:mod => "Modification", marker=:mod => "Modification") *
+		visual(Scatter; markersize=dotsize)
+	local grid = draw!(ax, dots)
+	if legend && !isnothing(fig)
+		legend!(fig[1, 1], grid; tellheight=false, tellwidth=false, halign=:center, valign=:bottom, orientation=:horizontal, framevisible=false, labelsize=fontsize, titlesize=fontsize)
+	end
+	println(mods)
+
+	hideydecorations!(ax)
+
+	if !isnothing(xlimits)
+		xlims!(ax, xlimits)
+	end
+
+	if isnothing(axis)
+		fig
+	else
+		axis
+	end
+end
+
+# ╔═╡ d112cefd-e4f9-45ba-a96e-9f1fe7fbd353
+plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; minheight = 1, maxheight = 10, dotsize=10)#, xlimits=(1170, 1850)) # RPL22
+
+# ╔═╡ 1bc79106-8075-4b6f-aac8-17cc2f58ea88
+begin
+	local fig = Figure()
+	local ax = Axis(fig[1, 1])
+	plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; minheight = 5, xlimits=(1170, 1850), legend=false, axis = ax) # RPL22
+	# ylims!(ax, -100, 100)
+	fig
+end
+
+# ╔═╡ e35dd878-06c3-4b3e-99f1-bd24705d8a6b
+plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.1, an_sig_comods), gtf, "ENST00000370994.8"; minheight = 1000)#, xlimits=(1170, 1850)) # SERBP1
+
+# ╔═╡ 6bfecb6c-b750-46d6-b5c1-1a0caf732809
+plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.1, an_sig_comods), gtf, "ENST00000370994.8"; minheight = 1000, xlimits=(4000, 6000)) # SERBP1
+
+# ╔═╡ 6c4e95d8-39fb-4e44-9778-778df71d9888
+an_sig_comods
+
+# ╔═╡ 4ac53947-763f-40bc-afed-6b3c05de042e
+split(sig_comods.reference[1], "|")[7]
+
+# ╔═╡ 9ee56964-d715-4faf-b740-6ce72e6b8e51
+function plot_transcript_comods_elliptical_arcs(sig_comods, gene; axis = nothing, colormap = :seaborn_crest_gradient, colorrange = (0, 100), highclip = :black, min_w = 2, max_w = 8, xlimits = nothing, minheight = nothing)
+	pairs = sig_comods[occursin.(gene, sig_comods.reference), :]
+	# exons = gtf[gtf.feature .== "exon" .&& occursin.(gene, gtf.attribute), :]
+
+
+	# shift = minimum(exons.start)
+	# minx = minimum(exons.start)
+	minx = 0
+	maxx = parse(Int, split(sig_comods[1, :reference], "|")[7])
+
+	if isnothing(axis)
+		fig = Figure(size = (1200, 600))
+		ax = Axis(fig[1, 1])
+	else
+		ax = axis
+	end
+
+	ticks = round.(range(minx, maxx; length = 4); digits = 0)
+	ax.xticks = (ticks, [format_with_commas(Int(t)) for t in ticks])
+
+	chr = pairs[1, :chr]
+	# text!(ax, -(maxx-minx)/30, 0; text = chr, align = (:right, :center))
+	ax.xlabel = chr
+	ax.xlabelsize = LABELSIZE
+
+	lines!(ax, [minx, maxx], [0, 0], color = :black, linewidth = 1)
+	scatter!(ax, range(minx, maxx; length = 40), zeros(40);
+			 marker = pairs[1, :strand] == "+" ? :rtriangle : :ltriangle,
+			 color = :black)
+
+	# for exon in eachrow(exons)
+	# 	lines!(ax, [exon.start - shift, exon.end - shift], [0, 0], color = :black, linewidth = 15)
+	# end
+	lines!(ax, [minx, maxx], [0, 0], color=:black, linewidth=15)
+
+	pairs[!, :neglogp] = -log10.(pairs.fisher_pvalue)
+	# tx_data[‘neglogp’] = -np.log10(tx_data[‘p_value’])
+    # min_w, max_w = 0.5, 6
+    # w_norm = (pairs.neglogp .- minimum(pairs.neglogp)) ./
+                 # (maximum(pairs.neglogp) - minimum(pairs.neglogp) + 1e-9)
+	w_norm = pairs.phi
+	pairs[!, :linewidth] = min_w .+ (max_w - min_w) .* w_norm
+
+	for pair in eachrow(pairs)
+		alpha = 0.25 + (1 - 0.25) * abs(pair.phi)
+		left = min(pair.pos1, pair.pos2)
+		right = max(pair.pos1, pair.pos2)
+		distance = right - left
+		radius = distance/2
+		
+		center = left + radius
+		orientation = sign(pair.phi)
+
+		h = isnothing(minheight) ? radius : max(minheight, radius)
+
+		t = range(0, orientation*π, 100)
+		x = radius * cos.(t)
+		y = minimum(h) * sin.(t)
+
+		lines!(ax, center.+x, y,
+			   color = pair.neglogp, #pair.phi,
+			   linewidth = pair.linewidth,
+			   alpha = alpha,
+			   colormap = colormap,
+			   colorrange = colorrange,#(minimum(pairs.phi), maximum(pairs.phi)),
+			   highclip = highclip)
+		
+		# arc!(ax, Point2f(center, 0), radius, 0, orientation*π,
+		# 	 color = pair.neglogp, #pair.phi,
+		# 	 linewidth = pair.linewidth,
+		# 	 alpha = alpha,
+		# 	 colormap = colormap,
+		# 	 colorrange = colorrange,#(minimum(pairs.phi), maximum(pairs.phi)),
+		# 	 highclip = highclip,
+		# 	 resolution = 10000)
+		println(pair.phi)
+	end
+
+	hideydecorations!(ax)
+
+	if !isnothing(xlimits)
+		xlims!(ax, xlimits)
+	end
+
+	if isnothing(axis)
+		fig
+	else
+		axis
+	end
+end
+
+# ╔═╡ cfd23630-c1dd-4848-b6eb-9a93f7f59cde
+plot_transcript_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, sig_comods), "ENST00000234875.9"; minheight=20) # RPL22
+
+# ╔═╡ 585b9beb-7e21-45ab-9794-e95c55799e55
+let
+	# Define ellipse parameters
+a, b = 2, 10 # semi-major and semi-minor axes
+t = range(0, π, 100)  # parameter for a half-ellipse (arc)
+
+# Parametric equations for an ellipse
+x = a * cos.(t)
+y = b * sin.(t)
+
+# Plot the arc
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, x, y, color = :blue)
+fig
+end
+
 # ╔═╡ da330153-49ee-41bd-82b3-43eb87c8ffa1
 plot_gene_comods(sig_comods, gtf, "ENST00000371095.7") # GNAS
 
 # ╔═╡ a1df4246-3313-44f5-9d81-bf66b27b2eae
-an_sig_comods[occursin.("SRSF2", an_sig_comods.reference), :]
+an_sig_comods[occursin.("RPL22", an_sig_comods.reference), :]
+
+# ╔═╡ c49f764e-4718-4678-869d-ac1dfdfb9492
+sort(sig_comods[occursin.("ENST00000234875.9", sig_comods.reference), :], :phi)
+
+# ╔═╡ 4d554305-bc31-4d9c-b459-5bde0665fbea
+
+
+# ╔═╡ b4718644-4b13-4473-851d-2fe8bb0be509
+sig_comods[sig_comods.pvalue .< 1e-30 .&& sig_comods.pos2 .- sig_comods.pos1 .> 300, :]
+
+# ╔═╡ e948eff2-d2e1-4067-8fb0-36297a48770a
+plot_gene_comods(sig_comods, gtf, "ENST00000253024.10") # TRIM28
+
+# ╔═╡ c8e12743-31d4-47eb-a2ec-64ab133e6cbe
+plot_gene_comods(sig_comods, gtf, "ENST00000254719.10") # RPA1
+
+# ╔═╡ 5b73e0b5-321b-4433-90c6-63c788f0d578
+
+plot_gene_comods(filter(r -> 6185600 < min(r.genomicPos1, r.genomicPos2) && max(r.genomicPos1, r.genomicPos2) < 6186640, sig_comods), gtf, "ENST00000234875.9", xlimits = (1000, 2000)) # RPL22
+
+# ╔═╡ b7ee8e0a-7f2f-4f05-ac43-ceb5ba893715
+plot_gene_comods(sig_comods, gtf, "ENST00000234875.9") # RPL22
+
+# ╔═╡ 3abe560f-6acd-43b3-83d8-850a5ccf3345
+plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; minheight = 1000, xlimits=(1170, 1850)) # RPL22
+
+# ╔═╡ b51dbb01-ce9b-4076-aa78-2b5020503539
+plot_gene_comods(sig_comods, gtf, "ENST00000479035.7") # RPL23
+
+# ╔═╡ 7627b3c9-5b1a-45fe-a885-5e42266629a9
+plot_gene_comods(sig_comods, gtf, "ENST00000479035.7"; xlimits = (2000, 2500)) # RPL23
 
 # ╔═╡ d448709c-ec77-4ab4-8f8a-eeaddc5a390c
 plot_gene_comods(sig_comods, gtf, "ENST00000359995.10") # SRSF2
@@ -9204,7 +10007,7 @@ begin
 	local insig_color = "#DDDDDD"
 
 
-	local df = copy(comods)#[1:100, :]
+	local df = copy(comods)[1:100, :]
 	df[!, :significant] = df.qvalue .< 0.05
 	local plt = data(df) *
 		mapping(:phi, :pvalue => (p -> -log10(p)), color = :significant) *
@@ -9265,7 +10068,7 @@ begin
 	local panel_b = brow[1:3, 1] = GridLayout()
 	local mods = copy(sig_peaks_ivt)
 	mods[!, :entropy1] = entropy.(eachrow(mods))
-	local df = innerjoin(sig_comods,
+	local df = innerjoin(filter(r -> abs(r.phi) > 0.1, sig_comods),
 						 mods[:, [:ref_id, :pos, :entropy1]],
 						 on = [:reference => :ref_id, :pos1 => :pos])
 	mods[!, :entropy2] = mods.entropy1
@@ -9288,12 +10091,20 @@ begin
 	println("mean entropy ", mean(df[df.log10_distance .< log10(40), :mean_entropy]), " ", mean(df[df.log10_distance .>= log10(40), :mean_entropy]))
 	println("Mann U phi ", HypothesisTests.MannWhitneyUTest(df[df.log10_distance .< log10(40), :phi], df[df.log10_distance .>= log10(40), :phi]))
 	println("mean phi ", mean(df[df.log10_distance .< log10(40), :phi]), " ", mean(df[df.log10_distance .>= log10(40), :phi]))
+	df[!, :combined_score] = 100 .* abs.(df.phi) .+ clamp.(-log10.(df.pvalue), 0, 100)
 	local labels_per_bin = 5
 	local labeled = combine(groupby(df, [:log10_distance_bin]),
-						    df -> vcat(sort(df[df.phi .>= 0, :], :phi, by = abs, rev = true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :],
-									   sort(df[df.phi .< 0, :], :phi, by = abs, rev = true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :]))
-	local srsf2 = df[df.gene .== "SRSF2", :]
-	labeled = vcat(labeled, srsf2[argmax(srsf2.phi):argmax(srsf2.phi), :])
+							# df -> vcat(sort(df[df.phi .>= 0, :], :combined_score, rev = true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :],
+							# 		   sort(df[df.phi .< 0, :], :combined_score, rev = true)[1:(df[1, :log10_distance_bin] == 2 ? 2*labels_per_bin : labels_per_bin), :]))
+						    df -> vcat(sort(df[df.phi .>= 0, :], :phi, by = abs, rev = true)[1:(df[1, :log10_distance_bin] <= 2 ? 0 : labels_per_bin), :],
+									   sort(df[df.phi .< 0, :], :phi, by = abs, rev = true)[1:(df[1, :log10_distance_bin] == 2 ? labels_per_bin : labels_per_bin), :]))
+	local high_significance = df[df.pvalue .< 1e-100 .&&
+								 (.! (df.log10_distance_bin .<= 2 .&&
+									 df.phi .> 0 .&&
+		 							 df.phi .< 0.6)), :]
+	labeled = unique(vcat(labeled, high_significance))
+	# local srsf2 = df[df.gene .== "SRSF2", :]
+	# labeled = vcat(labeled, srsf2[argmax(srsf2.phi):argmax(srsf2.phi), :])
 	local cancer_geneset = Set(cancer_genes.Hugo_Symbol)
 	labeled[!, :cancer] = [gene in cancer_geneset for gene in labeled.gene]
 	# df_cancer[!, :cancer] .= true
@@ -9335,10 +10146,10 @@ begin
 	local points = Point2f.(labeled.phi, labeled.log10_distance)
 	local labels = labeled.gene
 	println(labeled)
-	local label_positions = place_labels_nonoverlapping(points, labels; offset = 0.1, gene_offsets = Dict("SRSF2" => 0.45))
+	local label_positions = place_labels_nonoverlapping(points, labels; offset = 0.1, gene_offsets = Dict("SRSF2" => 0.45), height=0.075, width_factor=0.0475)
 	for (p, lp, label, cancer) in zip(points, label_positions, labels, labeled.cancer)
 		xalign = (lp[1] > p[1] ? :left : :right)
-	    text!(ax, label, position=lp, align=(xalign, :center), color=:black, fontsize = 11, font = cancer ? :bold : :italic)
+	    text!(ax, label, position=lp, align=(xalign, :center), color=:black, fontsize = 12, font = cancer ? :bold : :italic)
 	    lines!(ax, [p, lp], color=:gray, linewidth=0.5)
 	end
 	xlims!(ax, -1.2, 1.55)
@@ -9349,8 +10160,34 @@ begin
 	local ax = Axis(trow[1, 2])
 
 	# Plot SRSF2
-	plot_gene_comods(sig_comods, gtf, "ENST00000359995.10"; axis = ax, colormap = :seaborn_crest_gradient, highclip = :black)
-	text!(ax, 1600, -60; text = "SRSF2", align = (:center, :top))
+	# plot_gene_comods(sig_comods, gtf, "ENST00000359995.10"; axis = ax, colormap = :seaborn_crest_gradient, highclip = :black)
+	# text!(ax, 1600, -60; text = "SRSF2", align = (:center, :top))
+	# Plot RPL22
+	#plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; axis = ax, minheight=800, maxheight=2200, colormap = :seaborn_crest_gradient, highclip=:darkblue, fig=trow[1, 2])
+	plot_gene_comods_elliptical_arcs(filter(r -> abs(r.phi) > 0.15, an_sig_comods), gtf, "ENST00000234875.9"; minheight = 5, maxheight = 150, dotsize=15, xlimits=(1170, 1820), legend=true, colormap = :seaborn_crest_gradient, highclip=:darkblue, fig=trow[1, 2], axis = ax, fontsize=20) # RPL22
+	ylims!(ax, -150, 150)
+	# local xs, xe = 1170-30, 1850+30
+	# poly!(ax, Point2f[(xs, 2000), (xe, 2000), (xe, -2000), (xs, -2000)], color=(:white, 0), strokecolor=:red, strokewidth=1)
+	# plot_gene_comods(sig_comods, gtf, "ENST00000234875.9"; axis = ax, colormap = :seaborn_crest_gradient, highclip = :black)
+	# text!(ax, 0, -400; text = "RPL22", align = (:left, :top))
+	text!(ax, 0, -30; text = "RPL22", align = (:left, :top))
+	text!(ax, 1720, 130; text = "↑ Co-occurring", align = (:left, :top))
+	text!(ax, 1720, -130; text = "↓ Mutually exclusive", align = (:left, :bottom))
+
+	local inset_ax = Axis(trow[1, 2],
+						  width=Relative(0.5),
+						  height=Relative(0.2),
+						  halign=0.05,
+						  valign=0.95)
+						  # backgroundcolor="#F0F0F0")
+	hidedecorations!(inset_ax)
+	local tx = "ENST00000234875.9"
+	local name = "RPL22"
+	local gene_start = minimum(gtf[gtf.transcript_id .== tx, :start])
+
+	plot_isoforms_model!(inset_ax, "RPL22"; transcripts = Set([tx]), colors = Dict([tx => :black]), rename = Dict([tx => name]), focus=(gene_start+1170, gene_start+1820), fontsize=16, lpadding=2000)
+
+	
 	# lines!(ax, [2200, 3200], [1000, 1000], color = :black)
 	Colorbar(trow[1, 3], limits = [0, 100], colormap = :seaborn_crest_gradient, #:viridis,
     vertical = true, label = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", labelsize = LABELSIZE, labelpadding = LABELPAD)
@@ -9372,10 +10209,12 @@ begin
 	local tx2 = split(row2.reference, "|")[1]
 	local name1 = split(row1.reference, "|")[5]
 	local name2 = split(row2.reference, "|")[5]
+
+	local blue = "#00aaff"
 	
 	# local ax = Axis(gb[1, 1:2],
 	# 			    height = 110)
-	plot_isoforms_model!(ax, "MDH"; transcripts = Set([tx1, tx2]), colors = Dict([tx1 => :blue, tx2 => :orange]), focus = (gpos1-100, gpos2+100), rename = Dict([tx1 => name1, tx2 => name2]))
+	plot_isoforms_model!(ax, "MDH"; transcripts = Set([tx1, tx2]), colors = Dict([tx1 => blue, tx2 => :orange]), focus = (gpos1-100, gpos2+100), rename = Dict([tx1 => name1, tx2 => name2]), lpadding=1650)
 	
 	# local ax = Axis(gb[1, 1])
 	local tx1_mask = occursin.(tx1, an_sig_comods.reference)
@@ -9383,30 +10222,74 @@ begin
 	# local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
 	# 			  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
 	local colorrange = (0, 100)
+	local seq = tx_ref[row1.reference][(row1.pos1-10):(row1.pos2+10)]
+	println(seq)
+	local mod_symbols = Dict(["m⁵C" => :utriangle,
+							  "m⁶A" => :cross,
+							  "?" => :circle,
+							  "Ψ" => :rect])
+	local mod_colors = Dict(["m⁵C" => "#e69f00",
+							 "m⁶A" => "#009e73",
+							 "?" => "#0072b2",
+							 "Ψ" => "#cc79a7"])
 	local ax1, max_radius1 = arc_plot_genomic2(brow[2, 2],
 					  renamemods(an_sig_comods[tx1_mask, :]),
 					  an_sig_peaks_ivt[occursin.(tx1, an_sig_peaks_ivt.ref_id), :];
 					  range=(row1.pos1-2000, row1.pos2+2000),
-					  grange=(gpos1-20, gpos2+20),
+					  grange=(gpos1-10, gpos2+10),
 					  colorrange=colorrange,
 					  title=name1,
 					  highlight=(row1.pos1, row1.pos2),
-					  spinecolor=:blue,
-					  ticks = 3)
-	text!(ax1, 2, 8; text = "Co-occurring", align = (:left, :top))
-	text!(ax1, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
+					  spinecolor=blue,
+					  ticks = 3,
+					  sequence=seq,
+					  mod_symbols=mod_symbols,
+					  mod_colors=mod_colors)
+	text!(ax1, 1, 13; text = "↑ Co-occurring", align = (:left, :top))
+	text!(ax1, 1, -13; text = "↓ Mutually exclusive", align = (:left, :bottom))
+	Legend(brow[2, 2],
+    	   [MarkerElement(marker=mod_symbols["?"], markersize=16, color=mod_colors["?"]),
+	 		MarkerElement(marker=mod_symbols["m⁵C"], markersize=16, color=mod_colors["m⁵C"])],
+    	   ["Unknown", "m⁵C"],
+		   "Modification";
+		   tellheight=false,
+		   tellwidth=false,
+		   halign=:right,
+		   valign=:bottom,
+		   orientation=:horizontal,
+		   framevisible=false,
+		   titlegap=2,
+		   colgap=4,
+		   patchlabelgap=2)
 	local ax2, max_radius2 = arc_plot_genomic2(brow[3, 2],
 					  renamemods(an_sig_comods[tx2_mask, :]),
 					  an_sig_peaks_ivt[occursin.(tx2, an_sig_peaks_ivt.ref_id), :];
 					  range=(row2.pos1-2000, row2.pos2+2000),
-					  grange=(gpos1-20, gpos2+20),
+					  grange=(gpos1-10, gpos2+10),
 					  colorrange=colorrange,
 					  title=name2,
 					  highlight=(row2.pos1, row2.pos2),
 					  spinecolor=:orange,
-					  ticks = 3)
-	text!(ax2, 2, 8; text = "Co-occurring", align = (:left, :top))
-	text!(ax2, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
+					  ticks = 3,
+					  sequence=seq,
+					  mod_symbols=mod_symbols,
+					  mod_colors=mod_colors)
+	text!(ax2, 1, 13; text = "↑ Co-occurring", align = (:left, :top))
+	text!(ax2, 1, -13; text = "↓ Mutually exclusive", align = (:left, :bottom))
+	Legend(brow[3, 2],
+    	   [MarkerElement(marker=mod_symbols["?"], markersize=16, color=mod_colors["?"]),
+	 		MarkerElement(marker=mod_symbols["m⁵C"], markersize=16, color=mod_colors["m⁵C"])],
+    	   ["Unknown", "m⁵C"],
+		   "Modification";
+		   tellheight=false,
+		   tellwidth=false,
+		   halign=:right,
+		   valign=:bottom,
+		   orientation=:horizontal,
+		   framevisible=false,
+		   titlegap=2,
+		   colgap=4,
+		   patchlabelgap=2)
 	local max_radius = max(max_radius1, max_radius2) * 2
 	ylims!(ax1, -max_radius, max_radius)
 	ylims!(ax2, -max_radius, max_radius)
@@ -9451,7 +10334,7 @@ begin
 	local barplt = data(df) *
 		mapping(:pattern, :count, dodge = :tx, color = :tx) *
 		visual(BarPlot; width = 0.7, dodge_gap = 0.15)
-	draw!(top, barplt, scales(Color = (; palette = [:blue, :orange])))
+	draw!(top, barplt, scales(Color = (; palette = [blue, :orange])))
 
 	local expected = DataFrame(tx = [name1, name1, name1, name1,
 									 name2, name2, name2, name2],
@@ -9507,7 +10390,7 @@ begin
 
 	Legend(
         grid[1, 1],
-		[PolyElement(color=:blue),
+		[PolyElement(color=blue),
 		 PolyElement(color=:orange),
 		 PolyElement(color=(:white, 0), strokecolor=:black, strokewidth=1.5)],
 		[name1, name2, "Expected"],
@@ -9520,7 +10403,7 @@ begin
     )
 
 
-	colsize!(trow, 1, Relative(6/18))
+	colsize!(trow, 1, Relative(5/18))
 	# colsize!(trow, 2, Relative(6/18))
 	# colsize!(trow, 3, Relative(6/18))
 
@@ -10006,414 +10889,6 @@ begin
 	draw!(f, plt, scales(Color = (; palette = [:lightgrey, sig_color]));
 		  axis = (; xlabel = "← Mutually exclusive    𝛗    Co-occurring →       ", ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)", limits = ((-1, 1), (nothing, nothing))))
 	f
-end
-
-# ╔═╡ cd4f0a10-228a-473d-a8d3-6e7af9fe42da
-begin
-	local f = Figure(size = (1600, 1100))
-	local trow = f[1, 1] = GridLayout()
-	local brow = f[2, 1] = GridLayout()
-
-	local sig_color = "#800080" # "#051094"
-
-
-	local df = copy(comods)[1:100, :]
-	df[!, :significant] = df.qvalue .< 0.01
-	local plt = data(df) *
-		mapping(:phi, :pvalue => (p -> -log10(p)), color = :significant) *
-		visual(Scatter; markersize = 5)
-	draw!(trow[1, 1],
-		  plt,
-		  scales(Color = (; palette = [:grey, sig_color]));
-		  axis = (; #title = "All modification pairs",
-				  	xlabel = "← Mutually exclusive    𝛗    Co-occurring →        ",
-					ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
-					limits = ((-1, 1), (-2, 310))))
-
-
-	# local df = renamemods(an_comods)
-	# df[!, :significant] = df.qvalue .< 0.05
-
-	# # local df = copy(an_sig_comods)
-	# df[!, :pair] = map(get_pair, df.mod1, df.mod2)
-	# df = df[in.(df.pair, Ref(Set(["m⁵C-m⁶A"]))), :]
-	# # df[!, :type] = map(assoc_type, df.residual00, df.residual01, df.residual10, df.residual11)
-	# # df[!, :phi] .*= ifelse.(df.type .== :comod, 1, -1)
-	# local plt = data(df) *
-	# 	mapping(:phi,
-	# 			:pvalue => (p -> -log10(p)) => "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
-	# 		    color = :significant) *
-	# 	visual(Scatter; markersize = 5)
-	# draw!(trow[1, 2],
-	# 	  plt,
-	# 	  scales(Color = (; palette = [:grey, sig_color]));
-	# 	  axis = (; title = "m⁵C-m⁶A",
-	# 			    xlabel = "← Mutually exclusive    𝛗    Co-occurring →       ",
-	# 				ylabel = "-log₁₀(𝑃-𝑣𝑎𝑙𝑢𝑒)",
-	# 				limits = ((-1, 1), (-2, 310))))
-
-	# === PLOT B VARIANT 1
-
-	# local df = copy(an_sig_comods)
-	# df[!, :type] = sign.(df.phi)
-	# df = filter(r -> r.mod1 !== missing && r.mod2 !== missing, df)
-	# df[!, :pair] = map(get_pair, df.mod1, df.mod2)
-	# # df = filter(r -> r.pair in ["m5C-m6A", "Y-m5C", "Y-m6A", "m6A-m7G", "m5C-m7G"], df)
-	# df = sort(combine(groupby(df, [:pair, :type]), nrow => :count))
-
-	# df = innerjoin(df[df.type .== 1, [:pair, :count]], df[df.type .== -1, [:pair, :count]], on = :pair, makeunique = true)
-	# df[!, :lfc] = log2.(df.count ./ df.count_1)
-	# df[!, :SE] = sqrt.(1 ./ df.count .+ 1 ./ df.count_1)
-	# df[!, :conf] = 1.96 .* df.SE
-	# df[!, :total] = df.count .+ df.count_1
-	# df = sort(df[df.count .> 30 .&& df.count_1 .> 30, :], :total)
-	# local ax = Axis(trow[1, 2],
-	# 				xlabel = "logFC (co-occurring/mutually-exclusive)",
-	# 				ylabel = "Modification pair",
-	# 			    yticks = (1:nrow(df), map((p, t) -> "$p ($t)", df.pair, df.total)))
-	# for (i, row) in enumerate(eachrow(df))
-	# 	scatter!(ax, [row.lfc], [i], color = :black)
-	# 	lines!(ax, [row.lfc - row.conf, row.lfc + row.conf], [i, i], color = :black)
-	# end
-	# xlims!(ax, [0, 4])
-
-	# === PLOT B VARIANT 2
-	
-	# local glori_mods = Set(zip(glori.chrom, glori.strand, glori.start))
-	# local df = renamemods(an_sig_comods)
-	
-	# df = filter(r -> select_m6A_nonm6A(r) || (r.mod1 === "m⁶A" && r.mod2 === "m⁶A"), df)
-	# # df[!, :significant] = df.qvalue .< 0.01
-	# df[!, :mod1] = ifelse.(df.mod1 .=== missing, "unknown non-m⁶A", df.mod1)
-	# df[!, :mod2] = ifelse.(df.mod2 .=== missing, "unknown non-m⁶A", df.mod2)
-	# local m1 = ifelse.(df.mod1 .== "m⁶A", df.mod1, df.mod2)
-	# local m2 = ifelse.(df.mod1 .== "m⁶A", df.mod2, df.mod1) # map(get_pair, df.mod1, df.mod2)
-	# df[!, :pair] = map((a, b) -> join([a, b], "-"), m1, m2)
-	# df[!, :type] = sign.(df.phi)
-	# local counts = combine(groupby(df, :pair), nrow => :count)
-	# counts = counts[counts.count .> 10, :]
-	# df = innerjoin(df, counts, on = [:pair])
-
-	# local df2 = copy(df)
-
-	# local perm_results = []
-	# for i in 1:10_000
-	# 	# df2[!, :mod1] = shuffle(df2.mod1)
-	# 	# df2[!, :mod2] = shuffle(df2.mod2)
-	# 	df2[!, :pair] = shuffle(df2.pair)
-	# 	x = combine(groupby(df2, [:pair, :type]), nrow => :count)
-	# 	x = innerjoin(x[x.type .== 1, [:pair, :count]],
-	# 				  x[x.type .== -1, [:pair, :count]],
-	# 				  on = :pair,
-	# 				  makeunique = true)
-	# 	x[!, :lfc] = log2.(x.count ./ x.count_1)
-	# 	push!(perm_results, x)
-	# end
-	# perm_results = vcat(perm_results...)
-	# # perm_results = combine(groupby(perm_results, :pair),
-	# # 					   :lfc => mean => :perm_mean_lfc,
-	# # 					   :lfc => std => :perm_std_lfc,
-	# # 					   :lfc => (lfc -> 1.96 * std(lfc)/sqrt(length(lfc))) => :perm_conf)
-	# local baseline = mean(perm_results.lfc)
-	
-	# df = filter(r -> r.mod1 !== missing && r.mod2 !== missing, df)
-	# # df = filter(r -> r.pair in ["m5C-m6A", "Y-m5C", "Y-m6A", "m6A-m7G", "m5C-m7G"], df)
-	# df = sort(combine(groupby(df, [:pair, :type]), nrow => :count))
-
-	# df = innerjoin(df[df.type .== 1, [:pair, :count]], df[df.type .== -1, [:pair, :count]], on = :pair, makeunique = true)
-	# df[!, :lfc] = log2.(df.count ./ df.count_1)
-	# df[!, :SE] = sqrt.(1 ./ df.count .+ 1 ./ df.count_1)
-	# df[!, :conf] = 1.96 .* df.SE
-	# df[!, :total] = df.count .+ df.count_1
-	# df = sort(df[df.count .> 2 .&& df.count_1 .> 2, :], :total)
-
-	# # df = sort(innerjoin(df, perm_results, on = [:pair]), :total)
-	
-	# local ax = Axis(trow[1, 2],
-	# 				xlabel = "logFC (co-occurring/mutually-exclusive)",
-	# 				ylabel = "Modification pair",
-	# 			    yticks = (1:nrow(df), map((p, t) -> "$p\n($t)", df.pair, df.total)))
-	# lines!(ax, [baseline, baseline], [0.5, nrow(df)+0.5], color = :orange, linestyle = :dash)
-	# for (i, row) in enumerate(eachrow(df))
-	# 	scatter!(ax, [row.lfc], [i], color = :black)
-	# 	lines!(ax, [row.lfc - row.conf, row.lfc + row.conf], [i, i], color = :black)
-
-	# 	# scatter!(ax, [row.perm_mean_lfc], [i], color = :orange)
-	# 	# lines!(ax, [row.perm_mean_lfc - row.perm_conf, row.perm_mean_lfc + row.perm_conf], [i, i], color = :orange)
-	# end
-	# xlims!(ax, [-1, 5])
-
-	# PLOT B VARIANT 3
-
-	local glori_mods = Set(zip(glori.chrom, glori.strand, glori.start))
-	local df = renamemods(an_sig_comods)
-	
-	df = filter(r -> select_m6A_nonm6A(r) || (r.mod1 === "m⁶A" && r.mod2 === "m⁶A"), df)
-	# df[!, :significant] = df.qvalue .< 0.01
-	df[!, :mod1] = ifelse.(df.mod1 .=== missing, "Unclassified", df.mod1)
-	df[!, :mod2] = ifelse.(df.mod2 .=== missing, "Unclassified", df.mod2)
-	local m1 = ifelse.(df.mod1 .== "m⁶A", df.mod1, df.mod2)
-	local m2 = ifelse.(df.mod1 .== "m⁶A", df.mod2, df.mod1) # map(get_pair, df.mod1, df.mod2)
-	df[!, :pair] = map((a, b) -> join([a, b], "-"), m1, m2)
-	df[!, :type] = sign.(df.phi)
-	local counts = combine(groupby(df, :pair), nrow => :count)
-	counts = counts[counts.count .> 10, :]
-	df = innerjoin(df, counts, on = [:pair])
-	df[!, :pair_label] = map((p, c) -> "$p\n($c)", df.pair, df.count)
-
-	sort!(df, :count)
-
-	local groups = combine(groupby(df, :pair),
-						   :phi => (ps -> skipmissing(ps)) => :phis)
-	groups = map(collect, groups.phis)
-	
-	println(HypothesisTests.KruskalWallisTest(groups...))
-	
-	local plt = data(df) *
-		mapping(:pair_label => presorted => "Modification pair",
-				:phi => "← Mutually exclusive    𝛗    Co-occurring →        ") *
-		visual(Violin;
-			   orientation = :horizontal,
-			   side = :right,
-			   color = "#FF33B5")
-	draw!(trow[1, 2], plt; axis = (; limits = ((-1, 1), (0.7, length(groups) + 0.7))))
-
-
-	local panel_c = trow[1, 3] = GridLayout()
-	local mods = copy(sig_peaks_ivt)
-	mods[!, :entropy1] = entropy.(eachrow(mods))
-	local df = innerjoin(sig_comods,
-						 mods[:, [:ref_id, :pos, :entropy1]],
-						 on = [:reference => :ref_id, :pos1 => :pos])
-	mods[!, :entropy2] = mods.entropy1
-	df = innerjoin(df,
-				   mods[:, [:ref_id, :pos, :entropy2]],
-				   on = [:reference => :ref_id, :pos2 => :pos])
-
-	df[!, :mean_entropy] = (df.entropy1 .+ df.entropy2) ./ 2
-
-	local plt = data(df) *
-		mapping((:pos1, :pos2) => ((p1, p2) -> log10(abs(p1 - p2))) => "Distance",
-				:phi => "← Mutually exclusive    𝛗    Co-occurring →         ",
-			    color = :mean_entropy) *
-		visual(Scatter; markersize = 5)
-	draw!(panel_c[1, 1],
-		  plt;
-		  axis = (;
-			# title = "Modification pairs' association strength by distance between them",
-			# xticks = (1:0.1:4.2,
-			# 		  ["10nt", repeat([""], 9)..., "100nt", repeat([""], 9)..., "1,000nt", repeat([""], 9)..., "10,000nt", "", ""]),
-			# xticks = (map(log10, [(10:10:100)..., (200:100:1000)..., (2000:1000:10000)..., 11000, 12000]), ["10nt", repeat([""], 8)..., "100nt", repeat([""], 8)..., "1,000nt", repeat([""], 8)..., "10,000nt", "", ""]),
-			# xticksize = [3.0, repeat([1], 8)..., 3, repeat([1], 8)..., 3, repeat([1], 8)..., 3, repeat([1], 2)...],
-			# xminorticksvisible = true,
-		 #    xminorgridvisible = true,
-			# xminorticksize = 1.5,
-			# xminorticks = IntervalsBetween(5),
-			xticks = (1:1:4, ["10nt", "100nt", "1,000nt", "10,000nt"]),
-			xminorticksvisible = true,
-		    xminorgridvisible = true,
-			xminorticksize = 2,
-			xminorticks = map(log10, [(20:10:90)..., (200:100:900)..., (2000:1000:9000)..., 11000, 12000]),
-			limits = ((0.9, 4.2), (-1, 1))))
-	Colorbar(panel_c[1, 2], limits = [0, 1], colormap = :viridis,
-    vertical = true, label = "Information content")
-	colsize!(panel_c, 1, Relative(5/6))
-
-	
-
-	local ax = Axis(brow[1, 1:3],
-				    xtickformat = "{:,d}")# (vals -> map(format_with_commas, vals)))
-				    # height = 110)
-	# plot_isoforms_model!(ax, "PRRC2B"; transcripts = Set(["ENST00000682501.1", "ENST00000684596.1", "ENST00000683519.1"]), colors = Dict(["ENST00000682501.1" => :blue, "ENST00000684596.1" => :orange]), focus = (131496129-150, 131496179+200), rename = Dict(["ENST00000682501.1" => "PRRC2B-201", "ENST00000684596.1" => "PRRC2B-208", "ENST00000683519.1" => "PRRC2B-206"]))
-	
-	# # local ax = Axis(gb[1, 1])
-	# local tx1_mask = occursin.("ENST00000682501.1", an_sig_comods.reference)
-	# local tx2_mask = occursin.("ENST00000684596.1", an_sig_comods.reference)
-	# local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
-	# 			  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
-	# arc_plot_genomic2(brow[2, 1],
-	# 				  renamemods(an_sig_comods[tx1_mask, :]),
-	# 				  an_sig_peaks_ivt[occursin.("ENST00000682501.1", an_sig_peaks_ivt.ref_id), :];
-	# 				  range=(5000, 5300),
-	# 				  grange=(131496129-150, 131496179+100),
-	# 				  colorrange=colorrange,
-	# 				  title="PRRC2B-201",
-	# 				  highlight=(5089, 5139),
-	# 				  spinecolor=:blue)
-	# arc_plot_genomic2(brow[3, 1],
-	# 				  renamemods(an_sig_comods[tx2_mask, :]),
-	# 				  an_sig_peaks_ivt[occursin.("ENST00000684596.1", an_sig_peaks_ivt.ref_id), :];
-	# 				  range=(0, 12000),
-	# 				  grange=(131496129-150, 131496179+100),
-	# 				  colorrange=colorrange,
-	# 				  title="PRRC2B-208",
-	# 				  highlight=(7211, 7261),
-	# 				  spinecolor=:orange)
-	# Colorbar(brow[2:3, 2], limits = colorrange, colormap = :viridis,
- #    vertical = true, label = "-log₁₀(𝑃-value)")
-	local gpos1 = 76066564
-	local gpos2 = 76066573
-	local row1 = an_sig_comods[an_sig_comods.genomicPos1 .=== gpos1 .&& an_sig_comods.genomicPos2 .=== gpos2, :][2, :]
-	local row2 = an_sig_comods[an_sig_comods.genomicPos1 .=== gpos1 .&& an_sig_comods.genomicPos2 .=== gpos2, :][1, :]
-	local tx1 = split(row1.reference, "|")[1]
-	local tx2 = split(row2.reference, "|")[1]
-	local name1 = split(row1.reference, "|")[5]
-	local name2 = split(row2.reference, "|")[5]
-	
-	# local ax = Axis(gb[1, 1:2],
-	# 			    height = 110)
-	plot_isoforms_model!(ax, "MDH"; transcripts = Set([tx1, tx2]), colors = Dict([tx1 => :blue, tx2 => :orange]), focus = (gpos1-100, gpos2+100), rename = Dict([tx1 => name1, tx2 => name2]))
-	
-	# local ax = Axis(gb[1, 1])
-	local tx1_mask = occursin.(tx1, an_sig_comods.reference)
-	local tx2_mask = occursin.(tx2, an_sig_comods.reference)
-	local colorrange = (-log10(maximum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])),
-				  		-log10(minimum(an_sig_comods[tx1_mask .|| tx2_mask, :pvalue])))
-	local ax1, max_radius1 = arc_plot_genomic2(brow[2, 1],
-					  renamemods(an_sig_comods[tx1_mask, :]),
-					  an_sig_peaks_ivt[occursin.(tx1, an_sig_peaks_ivt.ref_id), :];
-					  range=(row1.pos1-2000, row1.pos2+2000),
-					  grange=(gpos1-100, gpos2+100),
-					  colorrange=colorrange,
-					  title=name1,
-					  highlight=(row1.pos1, row1.pos2),
-					  spinecolor=:blue)
-	text!(ax1, 2, 8; text = "Co-occurring", align = (:left, :top))
-	text!(ax1, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
-	local ax2, max_radius2 = arc_plot_genomic2(brow[3, 1],
-					  renamemods(an_sig_comods[tx2_mask, :]),
-					  an_sig_peaks_ivt[occursin.(tx2, an_sig_peaks_ivt.ref_id), :];
-					  range=(row2.pos1-2000, row2.pos2+2000),
-					  grange=(gpos1-100, gpos2+100),
-					  colorrange=colorrange,
-					  title=name2,
-					  highlight=(row2.pos1, row2.pos2),
-					  spinecolor=:orange)
-	text!(ax2, 2, 8; text = "Co-occurring", align = (:left, :top))
-	text!(ax2, 2, -8; text = "Mutually exclusive", align = (:left, :bottom))
-	local max_radius = max(max_radius1, max_radius2) * 2
-	ylims!(ax1, -max_radius, max_radius)
-	ylims!(ax2, -max_radius, max_radius)
-	Colorbar(brow[2:3, 2], limits = colorrange, colormap = :viridis,
-    vertical = true, label = "-log₁₀(𝑃-value)")
-	
-
-	local ref = row1.reference
-	local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", ref)
-	# local f = Figure(size = (600, 600))
-	
-
-	local df = DataFrame(Tables.table(probs[:, [row1.pos1+1-4, row1.pos2+1-4]] .> 0.5))
-	dropmissing!(df)
-	local observed1 = contingency(df.Column1, df.Column2) .+ 1
-	local res1 = HypothesisTests.ChisqTest(observed1)
-
-	local ref = row2.reference
-	local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", ref)
-	# local f = Figure(size = (600, 600))
-	
-
-	local df = DataFrame(Tables.table(probs[:, [row2.pos1+1-4, row2.pos2+1-4]] .> 0.5))
-	dropmissing!(df)
-	local observed2 = contingency(df.Column1, df.Column2) .+ 1
-	local res2 = HypothesisTests.ChisqTest(observed2)
-
-
-	local grid = brow[2:3, 3] = GridLayout()
-
-	local matrices = [(Int.(round.(res1.expected; digits = 0)), observed1),
-					  (Int.(round.(res2.expected; digits = 0)), observed2)]
-	local titles = [name1, name2]
-	for (i, (expected, observed)) in enumerate(matrices)
-		expected = expected[2:-1:1, :]
-		observed = observed[2:-1:1, :]
-		
-	    # Create an axis for this heatmap
-	    ax = Axis(grid[i, 1],
-				  title = titles[i],
-				  aspect = 1,
-				  xticks = (1:2, ["Unmodified", "Modified"]),
-				  yticks = (1:2, ["Unmodified", "Modified"]),
-				  yticklabelrotation = π/2)
-
-		println(transpose(log2.(observed ./ expected)))
-	    # Plot the heatmap
-	    heatmap!(ax, transpose(log2.(observed ./ expected)),
-	             colormap = :diverging_bwr_40_95_c42_n256,
-				 colorrange = (-2.5, 2.5))
-	             # colorrange = (0, max_count))
-	
-	    # Add row and column labels
-		# if i < 1
-		ax.xlabel = "$(format_with_commas(gpos1))\nm⁵C"
-		ax.ylabel = "?\n$(format_with_commas(gpos2))"
-		# else
-		# 	ax.xlabel = "Pos. 7211 (m⁶A)"
-		# 	ax.ylabel = "Pos. 7261 (m⁵C)"
-		# end
-	
-	    # Annotate cells with values (optional)
-	    for j in 1:2, k in 1:2
-	        text!(ax, string(observed[j, k]) * "/" * string(expected[j, k]),
-	              position = (k, j),
-				  fontsize = 13.5,
-	              align = (:center, :center),
-	              color = :black)
-	    end
-	end
-
-	# Legend(brow[4, 1],
-	# 	   [LineElement(points = [Point2f(cos(x)/2+0.3, sin(x) + 1) for x in 0:-0.1:-π]),
-	# 		LineElement(points = [Point2f(cos(x)/2+0.3, sin(x)) for x in 0:0.1:π])],
-	#        ["Mutually exclusive", "Co-occurring"],
-	# 	   orientation = :horizontal,
-	# 	   framevisible = false)
-
-
-	colsize!(trow, 1, Relative(5/18))
-	colsize!(trow, 2, Relative(5/18))
-	colsize!(trow, 3, Relative(8/18))
-
-	colsize!(brow, 1, Relative(11/13))
-	colsize!(brow, 2, Relative(0.5/13))
-	colsize!(brow, 3, Relative(1.5/13))
-	# rowsize!(f.layout, 1, Relative(1.8/7))
-	
-	rowsize!(f.layout, 1, Relative(3/8))
-	rowsize!(f.layout, 2, Relative(5/8))
-
-	rowsize!(brow, 1, Relative(1/7))
-	rowsize!(brow, 2, Relative(3/7))
-	rowsize!(brow, 3, Relative(3/7))
-	# rowsize!(brow, 4, Relative(1/10))
-	# rowsize!(brow, 5, Relative(2/10))
-
-	# Legend(ga[2, 1:2],
-	# 	   [PolyElement(color=Makie.wong_colors()[1]),
-	# 	    PolyElement(color=Makie.wong_colors()[2])],
-	#        ["Negative association", "Positive association"],
-	# 	   orientation = :horizontal,
-	# 	   framevisible = false)
-	
-	# Legend(gc[3, 1],
-	# 	   [PolyElement(color=:black),
-	# 		PolyElement(color="#dbdbdb", strokecolor=:darkgrey, strokewidth=1.5)],
-	#        ["Modified", "Not modified"],
-	# 	   orientation = :horizontal,
-	# 	   framevisible = false)
-
-
-	for (label, layout) in zip(["A", "B", "C", "D"],
-							   [trow[1, 1], trow[1, 2], trow[1, 3], brow[1, 1]])
-	    Label(layout[1, 1, TopLeft()], label,
-	        fontsize = 26,
-	        font = :bold,
-	        padding = (0, 5, 5, 0),
-	        halign = :right)
-	end
-
-	f
-	
 end
 
 # ╔═╡ 0e5025d6-3fc0-4380-9c1d-e1265ca4e58b
@@ -11533,10 +12008,14 @@ begin
 	local plt1 = data(df) * mapping(:glori_mod_ratio, :mod_ratio => "IVT ratio", color = :distance => "Distance to the GLORI site") * visual(Scatter, markersize = 5, alpha = 0.5) |> 
  # data(DataFrame(x = [0, 1], y = [0, 1])) * mapping(:x, :y) * visual(Lines; linestyle = :dash, color = :red))
 	# draw!(f[1, 1], plt1, 
-		draw(; axis = (; title = "Nanocompore (WT/IVT) vs. GLORI", aspect = 1, xlabel = "GLORI mod. ratio", ylabel = "Nanocompore mod. ratio", xticks = 0:0.1:1, yticks = 0:0.1:1))
+	draw(; axis=(; title = "Nanocompore (WT/IVT) vs. GLORI", aspect = 1, xlabel = "GLORI mod. ratio", ylabel = "Nanocomporeco mod. ratio", xticks = 0:0.1:1, yticks = 0:0.1:1), figure=(size=(550, 500),))#, colorbar=(size=5,))
+	# resize_to_layout!(plt1)
+	
 
 
-	# f
+	# colsize!(plt1.layout, 2, 0.1)
+	# save("/home/mzdravkov/test.png", plt1)
+	# plt1
 end
 
 # ╔═╡ 5bf138b3-7907-4fc6-96e7-d3a8bccc78af
@@ -11583,6 +12062,9 @@ end
 
 # ╔═╡ bc7932b4-80e1-4f05-981e-0c869c0dce85
 glori_raw
+
+# ╔═╡ d45c9d47-68f2-44d7-82ad-ddcb4877263f
+ivt
 
 # ╔═╡ a7eec8b0-9a15-42c0-aa0c-95675a21dcf7
 wtmk
@@ -11723,6 +12205,27 @@ function dunn(x, y)
 	(sum(xranks) - sum(yranks)) / ((N*(N+1)/12)*(1/nx + 1/ny))
 end
 
+# ╔═╡ 6050ae2f-92c9-427e-8058-3a61d8f4e8a3
+ivt[ivt.genomicPos .== 76066564 .|| ivt.genomicPos .== 76066573, :]
+
+# ╔═╡ 479fb2d0-bae4-4a3f-b0a7-03f94ae442cb
+comods
+
+# ╔═╡ 1007c9b7-2aaa-4cdc-9cfe-4efc14642ef7
+sum(sig_comods.pos2 .- sig_comods.pos1 .> 1000) / nrow(sig_comods)
+
+# ╔═╡ d8795ad6-415d-46e0-8abb-e9c8f7bf926d
+sum(sig_comods.pos2 .- sig_comods.pos1 .< 40) / nrow(sig_comods)
+
+# ╔═╡ 2ee422ad-994f-42ab-9127-f77f157bebbd
+nrow(sig_comods)*0.1
+
+# ╔═╡ 8eb74e1d-a6e7-4b13-85c2-8b29ca971496
+sort(sig_comods.pos2 .- sig_comods.pos1)
+
+# ╔═╡ 3f622f6d-9828-4742-b040-e3bfd4749479
+sort(an_sig_comods[occursin.("ENST00000234875.9", an_sig_comods.reference), :], :phi, by=abs, rev=true)
+
 # ╔═╡ Cell order:
 # ╠═41818e42-3cb8-4d48-93d9-b53e0eea7873
 # ╠═164f8adc-3bba-11f0-3c64-19ee3bf9097e
@@ -11843,6 +12346,7 @@ end
 # ╠═a617f69a-669d-499d-a40c-ef8f8b747e49
 # ╠═dd97de04-b552-4d11-a9a4-f46e0f5d670c
 # ╠═8ad73f0f-7e4f-4848-ae37-4e5780a1b0da
+# ╠═31ef15f2-8cf6-4711-82b8-59f34d2e043e
 # ╠═82a98275-f6d6-4ed1-9aa7-dd8ab59d9370
 # ╠═ec42c786-4e6d-41e0-a40b-8694f4f99590
 # ╠═61e39473-08e6-45fb-bfd2-545001a2ecef
@@ -12203,7 +12707,18 @@ end
 # ╠═854eef7a-e911-4f5b-8562-5bbd22e0c900
 # ╠═9bd1d228-e255-48ec-ba0f-07e5ac026581
 # ╠═a7910931-bbdf-42c5-821f-6af9996933c7
+# ╠═7dd9fe5b-c6d2-4e69-adf5-c7240f54e020
+# ╠═d112cefd-e4f9-45ba-a96e-9f1fe7fbd353
+# ╠═1bc79106-8075-4b6f-aac8-17cc2f58ea88
+# ╠═bf1d3910-2680-40c4-95e9-20969fb5c1f8
+# ╠═1bcc41a6-aa15-4118-8a88-0a160ce1df5f
 # ╠═0bf65cb8-d144-4384-b7c1-682c219a71ba
+# ╠═50cc58bc-2b7a-4501-8405-5f178beddc44
+# ╠═4db1d361-eb5c-45cd-9b4f-aaeb9b5528b6
+# ╠═dc7a2b77-4b3c-46d6-bc09-1a98dabf8c88
+# ╠═795cbda2-5cb9-4e63-bc09-43b55288dd5c
+# ╠═e35dd878-06c3-4b3e-99f1-bd24705d8a6b
+# ╠═6bfecb6c-b750-46d6-b5c1-1a0caf732809
 # ╠═347a22fe-b7a4-422b-a229-d34369e64422
 # ╠═d762ff2f-e90d-420b-9ae8-f5186316b5fa
 # ╠═8b238fa0-94b1-46a1-b6c0-fb3be10ecd6f
@@ -12235,8 +12750,24 @@ end
 # ╠═d47b96bd-3b7e-49ca-a240-4accfa3027e7
 # ╠═731c89c3-ca71-404d-8f80-cf3062eaec01
 # ╠═03f335b8-97de-4b2b-b03d-000800ae6565
+# ╠═7c0d7864-53ce-4fa1-bc8d-b87ce0eb2801
+# ╠═6c4e95d8-39fb-4e44-9778-778df71d9888
+# ╠═4ac53947-763f-40bc-afed-6b3c05de042e
+# ╠═9ee56964-d715-4faf-b740-6ce72e6b8e51
+# ╠═cfd23630-c1dd-4848-b6eb-9a93f7f59cde
+# ╠═585b9beb-7e21-45ab-9794-e95c55799e55
 # ╠═da330153-49ee-41bd-82b3-43eb87c8ffa1
 # ╠═a1df4246-3313-44f5-9d81-bf66b27b2eae
+# ╠═c49f764e-4718-4678-869d-ac1dfdfb9492
+# ╠═4d554305-bc31-4d9c-b459-5bde0665fbea
+# ╠═b4718644-4b13-4473-851d-2fe8bb0be509
+# ╠═e948eff2-d2e1-4067-8fb0-36297a48770a
+# ╠═c8e12743-31d4-47eb-a2ec-64ab133e6cbe
+# ╠═5b73e0b5-321b-4433-90c6-63c788f0d578
+# ╠═b7ee8e0a-7f2f-4f05-ac43-ceb5ba893715
+# ╠═3abe560f-6acd-43b3-83d8-850a5ccf3345
+# ╠═b51dbb01-ce9b-4076-aa78-2b5020503539
+# ╠═7627b3c9-5b1a-45fe-a885-5e42266629a9
 # ╠═d448709c-ec77-4ab4-8f8a-eeaddc5a390c
 # ╠═6a1eb59c-9249-4f3c-a66c-c44dbf803869
 # ╠═de14604b-2100-4c92-9297-733e832f4f4e
@@ -12311,6 +12842,7 @@ end
 # ╠═372dcaef-18a1-4a1d-b292-6d2a285e4d83
 # ╠═5bf138b3-7907-4fc6-96e7-d3a8bccc78af
 # ╠═bc7932b4-80e1-4f05-981e-0c869c0dce85
+# ╠═d45c9d47-68f2-44d7-82ad-ddcb4877263f
 # ╠═a7eec8b0-9a15-42c0-aa0c-95675a21dcf7
 # ╠═faa56f3f-6891-423c-89e3-95099dcc149c
 # ╠═5efd1815-277b-4444-803d-b48336b0abd7
@@ -12321,3 +12853,10 @@ end
 # ╠═fff284bb-8469-4441-ba77-f20bb296fc79
 # ╠═a03581d9-edf1-4932-9029-5336baa4b1d6
 # ╠═ede4a4d6-206b-4f24-9485-417c2fa982cc
+# ╠═6050ae2f-92c9-427e-8058-3a61d8f4e8a3
+# ╠═479fb2d0-bae4-4a3f-b0a7-03f94ae442cb
+# ╠═1007c9b7-2aaa-4cdc-9cfe-4efc14642ef7
+# ╠═d8795ad6-415d-46e0-8abb-e9c8f7bf926d
+# ╠═2ee422ad-994f-42ab-9127-f77f157bebbd
+# ╠═8eb74e1d-a6e7-4b13-85c2-8b29ca971496
+# ╠═3f622f6d-9828-4742-b040-e3bfd4749479
