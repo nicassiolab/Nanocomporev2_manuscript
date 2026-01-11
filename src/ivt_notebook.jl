@@ -10305,6 +10305,8 @@ begin
 	local res1 = HypothesisTests.ChisqTest(observed1)
 	local data1 = map(r -> join(Int.(collect(r)), "-"), eachrow(df1))
 	local counts1 = data1 |> countmap
+	println("$name1 observations:")
+	println(observed1)
 
 	local ref = row2.reference
 	local probs = get_read_mods("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/WT_IVT_eventalign_fix_mod_clust_inferring_read_level/out_sampComp_sql.db", ref)
@@ -10314,6 +10316,8 @@ begin
 	local res2 = HypothesisTests.ChisqTest(observed2)
 	local data2 = map(r -> join(Int.(collect(r)), "-"), eachrow(df2))
 	local counts2 = data2 |> countmap
+	println("$name2 observations:")
+	println(observed2)
 
 	
 	# local fig = Figure(size = (600, 600))
@@ -10348,6 +10352,7 @@ begin
 									    res2.expected[1, 2],
 									    res2.expected[2, 1],
 									    res2.expected[2, 2]])
+	println("Expected: \n", expected)
 	local barplt = data(expected) *
 		mapping(:pattern, :count, dodge = :tx) *
 		visual(BarPlot;

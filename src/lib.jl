@@ -111,6 +111,9 @@ function bin(df, bin_size = BIN_SIZE)
 	if "predicted" in names(df)
 		push!(columns, :predicted => maximum => :predicted)
 	end
+	if "predicted_raw" in names(df)
+		push!(columns, :predicted_raw => maximum => :predicted_raw)
+	end
 	if "mean_cov" in names(df)
 		push!(columns, :mean_cov => mean => :mean_cov)
 	end
@@ -124,25 +127,28 @@ function sharkfin(ax, df, col, lor_col; markersize=7, rasterize=false)
 	# scatter!(ax, abs.(df[nomods, lor_col]), df[nomods, col], color="#DDDDDD", alpha=1, markersize=markersize)
 	# scatter!(ax, abs.(df[mods, lor_col]), df[mods, col], color="#2E2585", alpha=0.8, markersize=markersize)
 	color = ifelse.(mods, "#2E2585", "#DDDDDD")
-	scatter!(ax, abs.(df[:, lor_col]), df[:, col], color=color, alpha=0.8, markersize=markersize, rasterize=rasterize)
+	score = -log10.(clamp.(coalesce.(df[:, col], 1), 1e-300, 1))
+	scatter!(ax, abs.(df[:, lor_col]), score, color=color, alpha=0.8, markersize=markersize, rasterize=rasterize)
 	ax.xlabel = "|LOR|"
-	ax.ylabel = "-log₁₀(q-value)"
+	ax.ylabel = "-log₁₀(𝑃-value)"
 end
 
 
 function corr_plot(ax, df, xlabel, ylabel; markersize=7, rasterize=false)
 	mods = df[!, "modified"] .== 1
 	nomods = .! mods
+	scores1 = -log10.(clamp.(coalesce.(df.GMM_chi2_pvalue, 1), 1e-300, 1))
+	scores2 = -log10.(clamp.(coalesce.(df.GMM_chi2_pvalue_1, 1), 1e-300, 1))
 	scatter!(ax,
-		     df[nomods, "predicted"],
-			 df[nomods, "predicted_1"],
+			 scores1[nomods],
+			 scores2[nomods],
 			 color="#DDDDDD",
 			 alpha=1,
 			 markersize=markersize,
 			 rasterize=rasterize)
 	scatter!(ax,
-			 df[mods, "predicted"],
-			 df[mods, "predicted_1"],
+			 scores1[mods],
+			 scores2[mods],
 			 color="#2E2585",
 			 alpha=0.8,
 			 markersize=markersize,
