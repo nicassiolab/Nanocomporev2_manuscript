@@ -118,8 +118,9 @@ g3 = f[3, 1] = GridLayout()
 # ==== A: GLORI barplot ====
 
 ax_glori = Axis(g1[1, 1],
+		title="GLORI m⁶A sites",
 	        yticks = (1:2, ["RNA004", "RNA002"]),
-	        xlabel = "m⁶A sites in GLORI",
+	        # xlabel = "m⁶A sites in GLORI",
 	        xticks = [0, 50000, 100000],
 	        xtickformat = "{:n}",
 	        height = 75)
@@ -166,7 +167,7 @@ Legend(g1[2, 1],
        [PolyElement(color = :black),
 	PolyElement(color = :grey),
 	PolyElement(color = :lightgreen)],
-       ["no coverage", "false negatives", "true positives"],
+       ["Insufficient Nanocompore coverage", "Nanocompore negative", "Nanocompore positive"],
        orientation = :horizontal,
        framevisible = false)
 
@@ -189,7 +190,7 @@ p001 = precision(roc(binned_rna002.modified,
 		     binned_rna002.predicted .>= -log10(0.01)))
 r001 = recall(roc(binned_rna002.modified,
 		  binned_rna002.predicted .>= -log10(0.01)))
-scatter!(ax_b, [r001], [p001], color = COL_RNA002)
+scatter!(ax_b, [r001], [p001], color = COL_RNA002, markersize=15)
 println("RNA002 precision = $p001, recall = $r001")
 
 a, p, r = auprc(binned_rna004.predicted,
@@ -202,7 +203,7 @@ p001 = precision(roc(binned_rna004.modified,
 		     binned_rna004.predicted .>= -log10(0.01)))
 r001 = recall(roc(binned_rna004.modified,
 		  binned_rna004.predicted .>= -log10(0.01)))
-scatter!(ax_b, [r001], [p001], color = COL_RNA004)
+scatter!(ax_b, [r001], [p001], color = COL_RNA004, markersize=15)
 println("RNA004 precision = $p001, recall = $r001")
 
 xlims!(ax_b, [0, 1])
@@ -339,7 +340,7 @@ density!(ax_stoich,
 # ==== E: venn ====
 
 ax_venn = Axis(g3[1, 2],
-	       title = "Overlap of true positives",
+	       title = "Overlap of GLORI-supported positives",
 	       height = 76)
 
 rna002_tps = binned_rna002[binned_rna002.modified .== 1 .&& binned_rna002.predicted .>= -log10(0.01), :]

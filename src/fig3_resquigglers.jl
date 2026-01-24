@@ -88,7 +88,7 @@ p001 = precision(roc(binned_eventalign.modified,
 r001 = recall(roc(binned_eventalign.modified,
     		  binned_eventalign.predicted .>= -log10(0.01)))
 println("Eventalign precision=$(p001) and recall=$(r001) at q-value<=0.01")
-scatter!(prc_ax, [r001], [p001], color="#E69F00")
+scatter!(prc_ax, [r001], [p001], color="#E69F00", markersize=15)
 println("Eventalign predicted modified $(sum(binned_eventalign[!, :predicted] .>= -log10(0.01)))")
 
 a, p, r = auprc(disallowmissing(binned_uncalled4[!, "predicted"]),
@@ -100,7 +100,7 @@ p001 = precision(roc(binned_uncalled4.modified,
 r001 = recall(roc(binned_uncalled4.modified,
     		  binned_uncalled4.predicted .>= -log10(0.01)))
 println("Uncalled4 precision=$(p001) and recall=$(r001) at q-value<=0.01")
-scatter!(prc_ax, [r001], [p001], color = "#D55E00")
+scatter!(prc_ax, [r001], [p001], color = "#D55E00", markersize=15)
 println("Uncalled4 predicted modified $(sum(binned_uncalled4[!, :predicted] .>= -log10(0.01)))")
 
 a, p, r = auprc(disallowmissing(binned_remora[!, "predicted"]),
@@ -112,7 +112,7 @@ p001 = precision(roc(binned_remora.modified,
 r001 = recall(roc(binned_remora.modified,
     		  binned_remora.predicted .>= -log10(0.01)))
 println("Remora precision=$(p001) and recall=$(r001) at q-value<=0.01")
-scatter!(prc_ax, [r001], [p001], color="#CC79A7")
+scatter!(prc_ax, [r001], [p001], color="#CC79A7", markersize=15)
 println("Remora predicted modified $(sum(binned_remora[!, :predicted] .>= -log10(0.01)))")
 
 axislegend("Resquiggler", position=:rt, labelsize=14, framevisible=false, titlesize=0)

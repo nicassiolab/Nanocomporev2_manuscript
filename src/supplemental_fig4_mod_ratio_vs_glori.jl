@@ -50,7 +50,7 @@ c = round(cor(df.glori_mod_ratio, df.mod_ratio), digits = 2)
 plt1 = data(df) *
 	mapping(:glori_mod_ratio, :mod_ratio => "IVT ratio", color = :distance => "Distance to the GLORI site") *
 	visual(Scatter, markersize = 5, alpha = 0.5, rasterize=2) |>
-	draw(; axis=(; title="Nanocompore (WT/IVT) vs. GLORI", aspect=1, xlabel="GLORI mod. ratio", ylabel="Nanocompore mod. ratio", xticks=0:0.1:1, yticks=0:0.1:1), figure=(size=(550, 500),))
+	draw(; axis=(; title="Nanocompore (Native/IVT) vs. GLORI", aspect=1, xlabel="GLORI mod. ratio", ylabel="Nanocompore mod. ratio", xticks=0:0.1:1, yticks=0:0.1:1), figure=(size=(550, 500),))
 
 
 save("supplemental_fig4_mod_ratio_vs_GLORI.png", plt1)
