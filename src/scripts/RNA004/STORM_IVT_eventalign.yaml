@@ -1,0 +1,41 @@
+data:
+   IVT:
+     IVT_1:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/IVT_tailed_1_eventalign_collapsed.sqlite"
+     IVT_2:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/IVT_tailed_2_eventalign_collapsed.sqlite"
+     IVT_3:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/IVT_notail_eventalign_collapsed.sqlite"
+   STORM:
+     STORM_1:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/STORM_1_eventalign_collapsed.sqlite"
+     STORM_2:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/STORM_2_eventalign_collapsed.sqlite"
+     STORM_SPK:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/resquiggled/STORM_SPK_eventalign_collapsed.sqlite"
+     
+
+fasta: "/work/mzdravkov/gencode.v41.transcripts.fa"
+depleted_condition: "IVT"
+
+kit: RNA004
+resquiggler: "eventalign"
+devices:
+  # "cpu": 5
+  "cuda:0": 9
+  "cuda:1": 9
+
+comparison_methods: ["GMM"]
+
+gtf: "/work/mzdravkov/gencode.v41.annotation.gtf"
+
+min_coverage: 30
+downsample_high_coverage: 5000
+result_exists_strategy: 'continue'
+
+# max_invalid_kmers_freq: 0.3
+
+outpath: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA004/nanocompore_output/STORM_IVT_eventalign_v2.0.0"
+
+log_level: debug
+

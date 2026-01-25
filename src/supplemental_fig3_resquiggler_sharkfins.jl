@@ -168,7 +168,7 @@ end
 
 
 println("Saving the figure")
-save("supplemental_fig6_resquigglers_sharkfins.png", fig)
-save("supplemental_fig6_resquigglers_sharkfins.pdf", fig)
+save("supplemental_fig3_resquigglers_sharkfins.png", fig)
+save("supplemental_fig3_resquigglers_sharkfins.pdf", fig)
 println("Done")
 

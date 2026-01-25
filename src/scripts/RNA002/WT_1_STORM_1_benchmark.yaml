@@ -1,0 +1,31 @@
+data:
+   STORM:
+     STORM_1:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/resquiggled/STORM_1_eventalign_collapsed.sqlite"
+   WT:
+     WT_1:
+       db: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/resquiggled/WT_1_eventalign_collapsed.sqlite"
+     
+
+fasta: "/work/mzdravkov/gencode.v41.transcripts.fa"
+depleted_condition: "STORM"
+
+kit: RNA002
+resquiggler: "eventalign"
+devices:
+  "cuda:0": 8
+  "cuda:1": 8
+
+comparison_methods: ["GMM", "KS"]
+
+nthreads: 17
+min_coverage: 30
+downsample_high_coverage: 5000
+result_exists_strategy: 'overwrite'
+
+max_invalid_kmers_freq: 0.9
+
+outpath: "/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/RNA002/nanocompore_output/WT_1_STORM_1_benchmark_v2"
+
+log_level: debug
+

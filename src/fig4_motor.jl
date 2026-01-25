@@ -398,5 +398,5 @@ plot_prc!(ax,
 
 axislegend(ax, "GMM test")
 
-save("supplemental_fig3_binned_motor.png", f)
-save("supplemental_fig3_binned_motor.pdf", f)
+save("supplemental_fig4_binned_motor.png", f)
+save("supplemental_fig4_binned_motor.pdf", f)

@@ -8,7 +8,7 @@ glori_raw = innerjoin(glori_raw1, glori_raw2,
 					  makeunique = true)
 
 
-cancer_genes = DataFrame(CSV.File("/home/mzdravkov/cancerGeneList.tsv", delim = '\t', normalizenames = true))
+cancer_genes = DataFrame(CSV.File("/projects/CGS_shared/FN_shared_projects/nanocompore_v2/data/cancerGeneList.tsv", delim = '\t', normalizenames = true))
 
 
 LABELPAD = 0
